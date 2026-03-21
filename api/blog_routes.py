@@ -10,76 +10,15 @@ GET /api/blog/categories         – all categories
 import html as _html
 import json as _json
 import logging
-import os
-from datetime import datetime
 
 import psycopg2
-import psycopg2.extras
-from fastapi import APIRouter, HTTPException, Query
+from dependencies import get_pg_conn
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel
+from psycopg2.extensions import connection as PgConn
+from schemas import CategoryOut, PostDetail, PostList, PostSummary, TagOut
 
 log = logging.getLogger(__name__)
-
-# ── DB config from environment ────────────────────────────────────────────────
-
-_BLOG_DB_CONFIG: dict = {
-    "host":             os.environ.get("BLOG_DB_HOST",     "localhost"),
-    "port":             int(os.environ.get("BLOG_DB_PORT", "5433")),
-    "user":             os.environ.get("BLOG_DB_USER",     "cloudista"),
-    "password":         os.environ.get("BLOG_DB_PASSWORD", ""),
-    "dbname":           os.environ.get("BLOG_DB_NAME",     "cloudista"),
-    "connect_timeout":  5,
-}
-
-
-def _pg_connect() -> psycopg2.extensions.connection:
-    return psycopg2.connect(
-        **_BLOG_DB_CONFIG,
-        cursor_factory=psycopg2.extras.RealDictCursor,
-    )
-
-
-# ── Response schemas ──────────────────────────────────────────────────────────
-
-class PostSummary(BaseModel):
-    id:           int
-    uuid:         str
-    title:        str
-    slug:         str
-    excerpt:      str | None
-    image_url:    str | None
-    author:       str
-    published_at: datetime | None
-
-
-class PostDetail(PostSummary):
-    content_html:  str
-    image_credit:  str | None
-    tags:          list[str] = []
-    categories:    list[str] = []
-
-
-class TagOut(BaseModel):
-    id:   int
-    name: str
-    slug: str
-
-
-class CategoryOut(BaseModel):
-    id:          int
-    name:        str
-    slug:        str
-    description: str | None
-    parent_id:   int | None
-
-
-class PostList(BaseModel):
-    posts:   list[PostSummary]
-    total:   int
-    page:    int
-    pages:   int
-    per_page: int
 
 
 # ── Router ────────────────────────────────────────────────────────────────────
@@ -89,19 +28,14 @@ router = APIRouter(prefix="/api", tags=["blog"])
 
 @router.get("/search", response_model=PostList)
 def search_posts(
-    q:        str = Query(..., min_length=2, max_length=200),
-    page:     int = Query(default=1, ge=1),
+    q: str = Query(..., min_length=2, max_length=200),
+    page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
+    conn: PgConn = Depends(get_pg_conn),
 ):
     """Full-text search across post titles and excerpts."""
     offset = (page - 1) * per_page
     term = f"%{q}%"
-
-    try:
-        conn = _pg_connect()
-    except Exception as exc:
-        log.error("Blog DB connect failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Blog database unreachable.")
 
     try:
         with conn.cursor() as cur:
@@ -129,25 +63,26 @@ def search_posts(
                 (term, term, term, per_page, offset),
             )
             rows = cur.fetchall()
-    except Exception as exc:
+    except psycopg2.Error as exc:
         log.error("search_posts error: %s", exc)
         raise HTTPException(status_code=500, detail="Search failed.")
-    finally:
-        conn.close()
 
     return PostList(
         posts=[PostSummary(**dict(row)) for row in rows],
-        total=total, page=page, per_page=per_page,
+        total=total,
+        page=page,
+        per_page=per_page,
         pages=(-(-total // per_page)),
     )
 
 
 @router.get("/posts", response_model=PostList)
 def list_posts(
-    page:     int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
-    tag:      str | None = Query(default=None),
+    tag: str | None = Query(default=None),
     category: str | None = Query(default=None),
+    conn: PgConn = Depends(get_pg_conn),
 ):
     """
     Return a paginated list of published posts, newest first.
@@ -163,7 +98,7 @@ def list_posts(
     """
     base_count = "SELECT COUNT(*) FROM posts p JOIN authors a ON a.id = p.author_id"
 
-    filters   = ["p.status = 'published'", "p.published_at <= NOW()"]
+    filters = ["p.status = 'published'", "p.published_at <= NOW()"]
     join_extra = ""
     params: list = []
 
@@ -180,12 +115,6 @@ def list_posts(
     where = " WHERE " + " AND ".join(filters)
 
     try:
-        conn = _pg_connect()
-    except Exception as exc:
-        log.error("Blog DB connect failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Blog database unreachable.")
-
-    try:
         with conn.cursor() as cur:
             cur.execute(base_count + join_extra + where, params)
             total = cur.fetchone()["count"]
@@ -196,11 +125,9 @@ def list_posts(
                 params + [per_page, offset],
             )
             rows = cur.fetchall()
-    except Exception as exc:
+    except psycopg2.Error as exc:
         log.error("list_posts error: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to fetch posts.")
-    finally:
-        conn.close()
 
     return PostList(
         posts=[PostSummary(**dict(row)) for row in rows],
@@ -212,14 +139,8 @@ def list_posts(
 
 
 @router.get("/posts/{slug}", response_model=PostDetail)
-def get_post(slug: str):
+def get_post(slug: str, conn: PgConn = Depends(get_pg_conn)):
     """Return a single published post with full HTML content, tags, and categories."""
-    try:
-        conn = _pg_connect()
-    except Exception as exc:
-        log.error("Blog DB connect failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Blog database unreachable.")
-
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -259,25 +180,17 @@ def get_post(slug: str):
 
     except HTTPException:
         raise
-    except Exception as exc:
+    except psycopg2.Error as exc:
         log.error("get_post(%s) error: %s", slug, exc)
         raise HTTPException(status_code=500, detail="Failed to fetch post.")
-    finally:
-        conn.close()
 
     return PostDetail(**dict(row), tags=tags, categories=categories)
 
 
 @router.get("/posts/{slug}/related", response_model=list[PostSummary])
-def related_posts(slug: str, limit: int = Query(default=4, ge=1, le=10)):
+def related_posts(slug: str, limit: int = Query(default=4, ge=1, le=10), conn: PgConn = Depends(get_pg_conn)):
     """Return up to `limit` published posts most related to the given slug,
     ranked by shared category + tag overlap."""
-    try:
-        conn = _pg_connect()
-    except Exception as exc:
-        log.error("Blog DB connect failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Blog database unreachable.")
-
     try:
         with conn.cursor() as cur:
             # Resolve slug → post id
@@ -320,23 +233,16 @@ def related_posts(slug: str, limit: int = Query(default=4, ge=1, le=10)):
             rows = cur.fetchall()
     except HTTPException:
         raise
-    except Exception as exc:
+    except psycopg2.Error as exc:
         log.error("related_posts(%s) error: %s", slug, exc)
         raise HTTPException(status_code=500, detail="Failed to fetch related posts.")
-    finally:
-        conn.close()
 
     return [PostSummary(**dict(r)) for r in rows]
 
 
 @router.get("/tags", response_model=list[TagOut])
-def list_tags():
+def list_tags(conn: PgConn = Depends(get_pg_conn)):
     """Return all tags that have at least one published post."""
-    try:
-        conn = _pg_connect()
-    except Exception as exc:
-        log.error("Blog DB connect failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Blog database unreachable.")
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -350,21 +256,14 @@ def list_tags():
                 """
             )
             return [TagOut(**dict(r)) for r in cur.fetchall()]
-    except Exception as exc:
+    except psycopg2.Error as exc:
         log.error("list_tags error: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to fetch tags.")
-    finally:
-        conn.close()
 
 
 @router.get("/categories", response_model=list[CategoryOut])
-def list_categories():
+def list_categories(conn: PgConn = Depends(get_pg_conn)):
     """Return all categories that have at least one published post."""
-    try:
-        conn = _pg_connect()
-    except Exception as exc:
-        log.error("Blog DB connect failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Blog database unreachable.")
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -378,11 +277,9 @@ def list_categories():
                 """
             )
             return [CategoryOut(**dict(r)) for r in cur.fetchall()]
-    except Exception as exc:
+    except psycopg2.Error as exc:
         log.error("list_categories error: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to fetch categories.")
-    finally:
-        conn.close()
 
 
 # ── Sitemap ────────────────────────────────────────────────────────────────────
@@ -390,30 +287,24 @@ def list_categories():
 _SITE_ROOT = "https://cloudista.org"
 
 _SITEMAP_STATIC = [
-    {"loc": f"{_SITE_ROOT}/",       "priority": "1.0", "changefreq": "weekly"},
-    {"loc": f"{_SITE_ROOT}/blog/",  "priority": "0.9", "changefreq": "daily"},
+    {"loc": f"{_SITE_ROOT}/", "priority": "1.0", "changefreq": "weekly"},
+    {"loc": f"{_SITE_ROOT}/blog/", "priority": "0.9", "changefreq": "daily"},
 ]
 
 
 def _xml_escape(s: str) -> str:
     return (
         s.replace("&", "&amp;")
-         .replace("<", "&lt;")
-         .replace(">", "&gt;")
-         .replace('"', "&quot;")
-         .replace("'", "&apos;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
     )
 
 
 @router.get("/sitemap.xml", include_in_schema=False)
-def sitemap():
+def sitemap(conn: PgConn = Depends(get_pg_conn)):
     """Dynamically generate sitemap.xml from all published posts."""
-    try:
-        conn = _pg_connect()
-    except Exception as exc:
-        log.error("Blog DB connect failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Blog database unreachable.")
-
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -426,14 +317,14 @@ def sitemap():
                 """
             )
             posts = cur.fetchall()
-    except Exception as exc:
+    except psycopg2.Error as exc:
         log.error("sitemap error: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to generate sitemap.")
-    finally:
-        conn.close()
 
-    lines = ['<?xml version="1.0" encoding="UTF-8"?>',
-             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
 
     for entry in _SITEMAP_STATIC:
         lines.append("  <url>")
@@ -443,7 +334,7 @@ def sitemap():
         lines.append("  </url>")
 
     for row in posts:
-        loc     = f"{_SITE_ROOT}/blog/{_xml_escape(row['slug'])}"
+        loc = f"{_SITE_ROOT}/blog/{_xml_escape(row['slug'])}"
         lastmod = row["lastmod"]
         lastmod_str = lastmod.strftime("%Y-%m-%d") if lastmod else ""
         lines.append("  <url>")
@@ -573,73 +464,73 @@ _POST_HTML_TEMPLATE = """\
 
 def _render_post_html(row: dict, tags: list, categories: list) -> str:
     e = _html.escape
-    title    = row.get("title") or ""
-    slug     = row.get("slug") or ""
-    author   = row.get("author") or "Marie H."
-    excerpt  = row.get("excerpt") or title
-    c_html   = row.get("content_html") or ""
-    image    = row.get("image_url") or ""
-    credit   = row.get("image_credit") or ""
-    pub      = row.get("published_at")
+    title = row.get("title") or ""
+    slug = row.get("slug") or ""
+    author = row.get("author") or "Marie H."
+    excerpt = row.get("excerpt") or title
+    c_html = row.get("content_html") or ""
+    image = row.get("image_url") or ""
+    credit = row.get("image_credit") or ""
+    pub = row.get("published_at")
 
     post_url = f"https://cloudista.org/blog/{slug}"
     og_image = image if image else "https://cloudista.org/og-image.png"
 
-    pub_date         = pub.strftime("%Y-%m-%d") if pub else ""
-    pub_date_display = (
-        f"{pub.strftime('%B')} {pub.day}, {pub.year}" if pub else ""
-    )
+    pub_date = pub.strftime("%Y-%m-%d") if pub else ""
+    pub_date_display = f"{pub.strftime('%B')} {pub.day}, {pub.year}" if pub else ""
 
-    json_ld = _json.dumps({
-        "@context":      "https://schema.org",
-        "@type":         "BlogPosting",
-        "headline":      title,
-        "description":   excerpt,
-        "datePublished": pub_date,
-        "dateModified":  pub_date,
-        "author":        {"@type": "Person", "name": author},
-        "url":           post_url,
-        "publisher":     {"@type": "Organization", "name": "Cloudista",
-                          "url": "https://cloudista.org"},
-    }, ensure_ascii=False)
+    json_ld = _json.dumps(
+        {
+            "@context": "https://schema.org",
+            "@type": "BlogPosting",
+            "headline": title,
+            "description": excerpt,
+            "datePublished": pub_date,
+            "dateModified": pub_date,
+            "author": {"@type": "Person", "name": author},
+            "url": post_url,
+            "publisher": {
+                "@type": "Organization",
+                "name": "Cloudista",
+                "url": "https://cloudista.org",
+            },
+        },
+        ensure_ascii=False,
+    )
 
     if image:
         credit_html = (
             f'<p class="post-hero__credit" id="post-hero-credit">{credit}</p>'
-            if credit else ""
+            if credit
+            else ""
         )
         hero_html = (
             f'<div class="post-hero" id="post-hero">'
             f'<img class="post-hero__img" id="post-hero-img"'
             f' src="{e(image)}" alt="{e(title)}" loading="lazy">'
-            f'{credit_html}</div>'
+            f"{credit_html}</div>"
         )
     else:
         hero_html = ""
 
     return _POST_HTML_TEMPLATE.format(
-        title_escaped           = e(title),
-        desc_escaped            = e(excerpt),
-        post_url_escaped        = e(post_url),
-        og_image_escaped        = e(og_image),
-        slug_escaped            = e(slug),
-        pub_date_display_escaped= e(pub_date_display),
-        author_escaped          = e(author),
-        json_ld                 = json_ld,
-        hero_html               = hero_html,
-        content_html            = c_html,
+        title_escaped=e(title),
+        desc_escaped=e(excerpt),
+        post_url_escaped=e(post_url),
+        og_image_escaped=e(og_image),
+        slug_escaped=e(slug),
+        pub_date_display_escaped=e(pub_date_display),
+        author_escaped=e(author),
+        json_ld=json_ld,
+        hero_html=hero_html,
+        content_html=c_html,
+        google_fonts_url=_GOOGLE_FONTS_URL,
     )
 
 
 @html_router.get("/blog/{slug}", response_class=HTMLResponse, include_in_schema=False)
-def render_post_page(slug: str):
+def render_post_page(slug: str, conn: PgConn = Depends(get_pg_conn)):
     """Return a server-rendered HTML page for a blog post (SEO / crawlers)."""
-    try:
-        conn = _pg_connect()
-    except Exception as exc:
-        log.error("Blog DB connect failed: %s", exc)
-        raise HTTPException(status_code=503)
-
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -673,11 +564,9 @@ def render_post_page(slug: str):
 
     except HTTPException:
         raise
-    except Exception as exc:
+    except psycopg2.Error as exc:
         log.error("render_post_page(%s) error: %s", slug, exc)
         raise HTTPException(status_code=500)
-    finally:
-        conn.close()
 
     return HTMLResponse(
         content=_render_post_html(dict(row), tags, categories),

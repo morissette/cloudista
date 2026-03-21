@@ -37,10 +37,9 @@ import psycopg2.extras
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-DB_DSN  = os.environ.get(
-    "POPULATE_DB_DSN",
-    "postgresql://cloudista:cloudista_dev@localhost:5433/cloudista"
-)
+_DEFAULT_DSN = "postgresql://cloudista:cloudista_dev@localhost:5433/cloudista"
+# Set POPULATE_DB_DSN in production; the default is for local dev only.
+DB_DSN = os.environ.get("POPULATE_DB_DSN", _DEFAULT_DSN)
 UTM               = "utm_source=cloudista&utm_medium=referral"
 IMG_PARAMS        = "w=900&q=80&fm=webp&auto=format&fit=crop&crop=entropy"
 PEXELS_IMG_PARAMS = "auto=compress&cs=tinysrgb&w=900&fit=crop"
@@ -461,6 +460,95 @@ def build_pexels_credit(photo: dict) -> str:
     )
 
 
+# ── Fetch with fallback ───────────────────────────────────────────────────────
+
+def _fetch_with_fallback(
+    query: str,
+    access_key: str,
+    pexels_key: str,
+    used_urls: set,
+    content: str = "",
+) -> tuple[dict, str] | tuple[None, None]:
+    """
+    Try Unsplash first, then Pexels, with content-keyword retries.
+    Returns (photo_dict, provider_name) or (None, None) if nothing found.
+    Handles RateLimitError internally — waits for Unsplash reset when no Pexels key.
+    """
+    def _try_unsplash(q: str) -> dict | None:
+        try:
+            return unsplash_fetch(q, access_key, used_urls)
+        except RateLimitError:
+            raise
+
+    def _try_pexels(q: str) -> dict | None:
+        if not pexels_key:
+            return None
+        try:
+            return pexels_fetch(q, pexels_key, used_urls)
+        except RateLimitError:
+            raise
+
+    def _attempt(q: str) -> tuple[dict, str] | tuple[None, None]:
+        photo = _try_unsplash(q)
+        if photo is not None:
+            return photo, "unsplash"
+        photo = _try_pexels(q)
+        if photo is not None:
+            return photo, "pexels"
+        return None, None
+
+    # Primary query
+    try:
+        result, provider = _attempt(query)
+    except RateLimitError:
+        if pexels_key:
+            print("    ⚠ Unsplash rate limit — trying Pexels...")
+            try:
+                photo = pexels_fetch(query, pexels_key, used_urls)
+                if photo is not None:
+                    return photo, "pexels"
+            except RateLimitError:
+                print("           ✗ Both Unsplash and Pexels rate-limited — skipping", file=sys.stderr)
+                return None, None
+        else:
+            wait = 65 * 60
+            print(f"\n  ✗ Unsplash rate limit hit — pausing {wait // 60} min for hourly reset...\n")
+            time.sleep(wait)
+            try:
+                result, provider = _attempt(query)
+            except RateLimitError:
+                print("           ✗ Still rate-limited after wait — skipping", file=sys.stderr)
+                return None, None
+    else:
+        if result is not None:
+            return result, provider
+
+    # Retry with content keywords
+    if content:
+        kws = _extract_keywords(content, n=6)
+        if kws:
+            alt_query = " ".join(kws[:4])
+            print(f"           ↩ retrying with keyword query: {alt_query!r}")
+            try:
+                result, provider = _attempt(alt_query)
+                if result is not None:
+                    return result, provider
+            except RateLimitError:
+                pass
+
+            for prefix in ("devops", "platform engineering"):
+                prefixed = f"{prefix} {alt_query}"
+                print(f"           ↩ retrying with: {prefixed!r}")
+                try:
+                    result, provider = _attempt(prefixed)
+                    if result is not None:
+                        return result, provider
+                except RateLimitError:
+                    pass
+
+    return None, None
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -589,55 +677,9 @@ def main():
             print()
             continue
 
-        photo    = None
-        provider = None
-        try:
-            photo    = unsplash_fetch(query, access_key, used_urls)
-            provider = "unsplash"
-            # All results in use — retry with content keyword query
-            if photo is None and content:
-                kws = _extract_keywords(content, n=6)
-                if kws:
-                    alt_query = " ".join(kws[:4])
-                    print(f"           ↩ retrying with keyword query: {alt_query!r}")
-                    photo = unsplash_fetch(alt_query, access_key, used_urls)
-                    if photo is None and pexels_key:
-                        photo    = pexels_fetch(alt_query, pexels_key, used_urls)
-                        provider = "pexels"
-                    # Still nothing — prefix with broader context terms
-                    for prefix in ("devops", "platform engineering"):
-                        if photo is not None:
-                            break
-                        prefixed = f"{prefix} {alt_query}"
-                        print(f"           ↩ retrying with: {prefixed!r}")
-                        photo = unsplash_fetch(prefixed, access_key, used_urls)
-                        if photo is None and pexels_key:
-                            photo    = pexels_fetch(prefixed, pexels_key, used_urls)
-                            provider = "pexels"
-                        if photo is not None:
-                            provider = "unsplash" if photo is not None and "urls" in photo else "pexels"
-        except RateLimitError:
-            if pexels_key:
-                print("    ⚠ Unsplash rate limit — trying Pexels…")
-                try:
-                    photo    = pexels_fetch(query, pexels_key, used_urls)
-                    provider = "pexels"
-                except RateLimitError:
-                    print("           ✗ Both Unsplash and Pexels rate-limited — skipping", file=sys.stderr)
-                    errors += 1
-                    continue
-            else:
-                # No Pexels key — wait for Unsplash hourly reset then retry
-                wait = 65 * 60
-                print(f"\n  ✗ Unsplash rate limit hit — pausing {wait//60} min for hourly reset…\n")
-                time.sleep(wait)
-                try:
-                    photo    = unsplash_fetch(query, access_key, used_urls)
-                    provider = "unsplash"
-                except RateLimitError:
-                    print("           ✗ Still rate-limited after wait — skipping", file=sys.stderr)
-                    errors += 1
-                    continue
+        photo, provider = _fetch_with_fallback(
+            query, access_key, pexels_key, used_urls, content
+        )
 
         if not photo:
             print("           ✗ No results — skipping")
@@ -645,11 +687,11 @@ def main():
         else:
             if provider == "pexels":
                 img_url = build_pexels_image_url(photo)
-                credit  = build_pexels_credit(photo)
+                credit = build_pexels_credit(photo)
                 print(f"           ✓ [pexels] {photo['id']} by {photo['photographer']}")
             else:
                 img_url = build_image_url(photo)
-                credit  = build_credit(photo)
+                credit = build_credit(photo)
                 print(f"           ✓ [unsplash] {photo['id']} by {photo['user']['name']}")
 
             cur.execute(

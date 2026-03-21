@@ -73,49 +73,27 @@ if [[ "$MODE" != "--site" ]]; then
   scp_file scripts/verify_pending.py "$SSH_HOST:$REMOTE_WEB/scripts/"
   ok "API source + scripts uploaded"
 
-  step "Configuring database user..."
+  step "Ensuring API .env exists..."
   ssh_cmd bash << 'REMOTE'
-    ENV_FILE="/www/cloudista.org/api/.env"
-
-    if [ ! -f "$ENV_FILE" ]; then
-      # Generate a random password (alphanumeric, safe for shell)
-      DB_PASS=$(openssl rand -base64 18 | tr -d '/+=')
-      cat > "$ENV_FILE" << EOF
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=cloudista_api
-DB_PASSWORD=${DB_PASS}
-DB_NAME=cloudista
+  ENV_FILE="/www/cloudista.org/api/.env"
+  if [ ! -f "$ENV_FILE" ]; then
+    cat > "$ENV_FILE" << 'EOF'
+BLOG_DB_HOST=localhost
+BLOG_DB_PORT=5433
+BLOG_DB_USER=cloudista
+BLOG_DB_PASSWORD=cloudista_dev
+BLOG_DB_NAME=cloudista
+AWS_REGION=us-east-1
+FROM_EMAIL=noreply@cloudista.org
+CONFIRM_BASE_URL=https://cloudista.org/api/confirm
+SITE_URL=https://cloudista.org
+TURNSTILE_SECRET=
 EOF
-      chmod 600 "$ENV_FILE"
-      echo "    ✓ .env created with generated password"
-    else
-      echo "    ✓ .env already exists — preserving"
-    fi
-
-    # Append SES / site vars if not already present
-    grep -q "AWS_REGION"       "$ENV_FILE" || echo "AWS_REGION=us-east-1"                              >> "$ENV_FILE"
-    grep -q "FROM_EMAIL"       "$ENV_FILE" || echo "FROM_EMAIL=noreply@cloudista.org"                  >> "$ENV_FILE"
-    grep -q "CONFIRM_BASE_URL" "$ENV_FILE" || echo "CONFIRM_BASE_URL=https://cloudista.org/api/confirm" >> "$ENV_FILE"
-    grep -q "SITE_URL"         "$ENV_FILE" || echo "SITE_URL=https://cloudista.org"                    >> "$ENV_FILE"
-    grep -q "TURNSTILE_SECRET"  "$ENV_FILE" || echo "TURNSTILE_SECRET="                                  >> "$ENV_FILE"
-    grep -q "BLOG_DB_HOST"     "$ENV_FILE" || echo "BLOG_DB_HOST=localhost"                              >> "$ENV_FILE"
-    grep -q "BLOG_DB_PORT"     "$ENV_FILE" || echo "BLOG_DB_PORT=5433"                                   >> "$ENV_FILE"
-    grep -q "BLOG_DB_USER"     "$ENV_FILE" || echo "BLOG_DB_USER=cloudista"                              >> "$ENV_FILE"
-    grep -q "BLOG_DB_PASSWORD" "$ENV_FILE" || echo "BLOG_DB_PASSWORD=cloudista_dev"                      >> "$ENV_FILE"
-    grep -q "BLOG_DB_NAME"     "$ENV_FILE" || echo "BLOG_DB_NAME=cloudista"                              >> "$ENV_FILE"
-    echo "    ✓ .env vars present"
-
-    # GRANT ... IDENTIFIED BY is the MariaDB 5.5 compatible way to create a
-    # user (if not exists) and set permissions in one statement.
-    # With --network host the container connects as 127.0.0.1, so @'localhost'
-    # covers both TCP and unix-socket connections.
-    DB_PASS=$(grep DB_PASSWORD "$ENV_FILE" | cut -d= -f2)
-    sudo mysql -e "
-      GRANT SELECT, INSERT, UPDATE ON cloudista.* TO 'cloudista_api'@'localhost' IDENTIFIED BY '${DB_PASS}';
-      FLUSH PRIVILEGES;
-    "
-    echo "    ✓ DB user cloudista_api ready"
+    chmod 600 "$ENV_FILE"
+    echo "    ✓ .env created"
+  else
+    echo "    ✓ .env already exists — preserving"
+  fi
 REMOTE
 
   step "Building Docker image..."

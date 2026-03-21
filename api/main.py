@@ -7,25 +7,29 @@ GET  /api/health           – liveness probe (validates DB connectivity)
 """
 
 import hashlib
-import json as _json
+import json
 import logging
-import os
 import urllib.parse
 import urllib.request
 import uuid
-from datetime import datetime
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from enum import Enum
 
 import boto3
-import pymysql
-import pymysql.cursors
+import psycopg2
+import psycopg2.errors
 from blog_routes import html_router as blog_html_router
 from blog_routes import router as blog_router
 from botocore.exceptions import BotoCoreError, ClientError
+from config import settings
+from dependencies import close_pool, get_pg_conn, init_pool
 from email_template import build_verification_email
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, EmailStr
+from psycopg2.extensions import connection as PgConn
+from schemas import HealthOut, MessageOut, SubscribeIn
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -36,33 +40,30 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Config from environment
-# ---------------------------------------------------------------------------
-_DB_CONFIG: dict = {
-    "host":            os.environ["DB_HOST"],
-    "port":            int(os.environ.get("DB_PORT", 3306)),
-    "user":            os.environ["DB_USER"],
-    "password":        os.environ["DB_PASSWORD"],
-    "database":        os.environ["DB_NAME"],
-    "charset":         "utf8mb4",
-    "cursorclass":     pymysql.cursors.DictCursor,
-    "connect_timeout": 5,
-}
 
-AWS_REGION        = os.environ.get("AWS_REGION",        "us-east-1")
-FROM_EMAIL        = os.environ.get("FROM_EMAIL",        "noreply@cloudista.org")
-CONFIRM_BASE_URL  = os.environ.get("CONFIRM_BASE_URL",  "https://cloudista.org/api/confirm")
-SITE_URL          = os.environ.get("SITE_URL",          "https://cloudista.org")
-TURNSTILE_SECRET  = os.environ.get("TURNSTILE_SECRET",  "")
+# ---------------------------------------------------------------------------
+# Turnstile result enum
+# ---------------------------------------------------------------------------
+class TurnstileResult(Enum):
+    VALID = "valid"
+    INVALID = "invalid"
+    UNAVAILABLE = "unavailable"
 
-# boto3 picks up credentials from the EC2 instance's IAM role automatically.
-_ses = boto3.client("ses", region_name=AWS_REGION)
+
+# ---------------------------------------------------------------------------
+# Lifespan
+# ---------------------------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_pool()
+    yield
+    close_pool()
+
 
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Cloudista API", docs_url=None, redoc_url=None)
+app = FastAPI(title="Cloudista API", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 app.include_router(blog_router)
 app.include_router(blog_html_router)
@@ -78,26 +79,16 @@ app.add_middleware(
     max_age=3600,
 )
 
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
-
-class SubscribeIn(BaseModel):
-    email: EmailStr
-    source: str = "coming_soon"
-    cf_turnstile_token: str | None = None
+# boto3 picks up credentials from the EC2 instance's IAM role automatically.
+_ses = boto3.client("ses", region_name=settings.aws_region)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _connect() -> pymysql.connections.Connection:
-    return pymysql.connect(**_DB_CONFIG)
-
-
 def _make_token(email: str) -> str:
-    raw = f"{email}{uuid.uuid4()}{datetime.utcnow().timestamp()}"
+    raw = f"{email}{uuid.uuid4()}{datetime.now(timezone.utc).timestamp()}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -109,24 +100,24 @@ def _real_ip(request: Request) -> str | None:
     )
 
 
-def _verify_turnstile(token: str, remote_ip: str | None) -> bool:
-    """Verify a Cloudflare Turnstile token. Returns True if valid."""
-    params: dict = {"secret": TURNSTILE_SECRET, "response": token}
-    if remote_ip:
-        params["remoteip"] = remote_ip
-    data = urllib.parse.urlencode(params).encode()
+def _verify_turnstile(token: str, ip: str | None) -> TurnstileResult:
+    """Verify a Cloudflare Turnstile token. Returns TurnstileResult enum."""
+    payload = urllib.parse.urlencode({
+        "secret": settings.turnstile_secret,
+        "response": token,
+        **({"remoteip": ip} if ip else {}),
+    }).encode()
     try:
-        req = urllib.request.Request(
+        with urllib.request.urlopen(
             "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-            data=data,
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            result = _json.loads(resp.read())
-        return bool(result.get("success"))
+            data=payload,
+            timeout=5,
+        ) as resp:
+            data = json.loads(resp.read())
+        return TurnstileResult.VALID if data.get("success") else TurnstileResult.INVALID
     except Exception as exc:
-        log.error("Turnstile verify error: %s", exc)
-        return False
+        log.warning("Turnstile verify failed (fail open): %s", exc)
+        return TurnstileResult.UNAVAILABLE
 
 
 def _send_verification(email: str, token: str) -> None:
@@ -134,14 +125,14 @@ def _send_verification(email: str, token: str) -> None:
     Send a verification email via AWS SES.
     Raises on failure so the caller can decide whether to propagate.
     """
-    confirm_url = f"{CONFIRM_BASE_URL}/{token}"
+    confirm_url = f"{settings.confirm_base_url}/{token}"
     subject, html, text = build_verification_email(confirm_url)
 
     _ses.send_email(
-        Source=FROM_EMAIL,
+        Source=settings.from_email,
         Destination={"ToAddresses": [email]},
         Message={
-            "Subject": {"Data": subject,  "Charset": "UTF-8"},
+            "Subject": {"Data": subject, "Charset": "UTF-8"},
             "Body": {
                 "Html": {"Data": html, "Charset": "UTF-8"},
                 "Text": {"Data": text, "Charset": "UTF-8"},
@@ -149,107 +140,6 @@ def _send_verification(email: str, token: str) -> None:
         },
     )
     log.info("Verification email sent → %s", email)
-
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
-@app.get("/api/health")
-def health():
-    """Liveness probe. Always returns 200; DB connectivity reported in body."""
-    db_ok = True
-    db_error = None
-    try:
-        conn = _connect()
-        conn.ping()
-        conn.close()
-    except Exception as exc:
-        log.warning("DB ping failed: %s", exc)
-        db_ok = False
-        db_error = str(exc)
-    return {"status": "ok", "db": "ok" if db_ok else "unavailable", **({"db_error": db_error} if db_error else {})}
-
-
-@app.post("/api/subscribe", status_code=201)
-def subscribe(body: SubscribeIn, request: Request):
-    """
-    Register an email address for launch notifications.
-
-    Flow:
-    1. Insert row with status='pending'
-    2. Send verification email via SES
-    3. User clicks link → GET /api/confirm/{token}
-    """
-    ip    = _real_ip(request)
-    ua    = request.headers.get("User-Agent", "")[:500]
-    token = _make_token(body.email)
-
-    # Verify CAPTCHA token when the client flagged suspicious behaviour
-    if body.cf_turnstile_token:
-        if not TURNSTILE_SECRET:
-            log.warning("TURNSTILE_SECRET not configured; skipping verification")
-        elif not _verify_turnstile(body.cf_turnstile_token, ip):
-            raise HTTPException(status_code=400, detail="CAPTCHA verification failed. Please try again.")
-
-    try:
-        conn = _connect()
-    except Exception as exc:
-        log.error("DB connect failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable.")
-
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, status FROM subscribers WHERE email = %s LIMIT 1",
-                (body.email,),
-            )
-            row = cur.fetchone()
-
-            if row:
-                if row["status"] == "unsubscribed":
-                    # Re-subscribe: reset to pending and resend verification
-                    cur.execute(
-                        """UPDATE subscribers
-                              SET status          = 'pending',
-                                  token           = %s,
-                                  unsubscribed_at = NULL
-                            WHERE id = %s""",
-                        (token, row["id"]),
-                    )
-                    conn.commit()
-                    _try_send_verification(body.email, token)
-                    return {"message": "Welcome back! Check your email to confirm."}
-
-                if row["status"] == "pending":
-                    # Resend verification in case they missed the first one
-                    _try_send_verification(body.email, row["token"])
-                    return {"message": "Check your email — we've resent the confirmation link."}
-
-                # already confirmed
-                return {"message": "You're already confirmed — we'll notify you at launch!"}
-
-            cur.execute(
-                """INSERT INTO subscribers
-                          (email, source, token, ip_address, user_agent)
-                   VALUES (%s,    %s,     %s,    %s,         %s)""",
-                (body.email, body.source, token, ip, ua),
-            )
-            conn.commit()
-
-        # Send outside the cursor context (network call)
-        _try_send_verification(body.email, token)
-        log.info("New subscriber: %s via %s", body.email, body.source)
-        return {"message": "Almost there — check your email to confirm your subscription."}
-
-    except pymysql.err.IntegrityError:
-        return {"message": "Check your email — we've sent you a confirmation link."}
-    except Exception as exc:
-        conn.rollback()
-        log.error("subscribe(%s) error: %s", body.email, exc)
-        raise HTTPException(status_code=500, detail="Failed to save your subscription.")
-    finally:
-        conn.close()
 
 
 def _try_send_verification(email: str, token: str) -> None:
@@ -260,18 +150,95 @@ def _try_send_verification(email: str, token: str) -> None:
         log.error("SES send failed for %s: %s", email, exc)
 
 
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+@app.get("/api/health", response_model=HealthOut)
+def health(conn: PgConn = Depends(get_pg_conn)):
+    """Liveness probe. Always returns 200; DB connectivity reported in body."""
+    db_ok = True
+    db_error = None
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+    except Exception as exc:
+        log.warning("DB ping failed: %s", exc)
+        db_ok = False
+        db_error = str(exc)
+    return HealthOut(
+        status="ok",
+        db="ok" if db_ok else "unavailable",
+        db_error=db_error,
+    )
+
+
+@app.post("/api/subscribe", status_code=201, response_model=MessageOut)
+def subscribe(body: SubscribeIn, request: Request, conn: PgConn = Depends(get_pg_conn)):
+    """
+    Register an email address for launch notifications.
+
+    Flow:
+    1. Insert row with status='pending'
+    2. Send verification email via SES
+    3. User clicks link → GET /api/confirm/{token}
+    """
+    ip = _real_ip(request)
+    ua = request.headers.get("User-Agent", "")[:500]
+    token = _make_token(body.email)
+
+    if body.cf_turnstile_token and settings.turnstile_secret:
+        result = _verify_turnstile(body.cf_turnstile_token, ip)
+        if result is TurnstileResult.INVALID:
+            raise HTTPException(status_code=400, detail="CAPTCHA verification failed.")
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, status, token FROM subscribers WHERE email = %s LIMIT 1",
+                (body.email,),
+            )
+            row = cur.fetchone()
+
+            if row:
+                if row["status"] == "confirmed":
+                    return MessageOut(message="Already confirmed.")
+                if row["status"] == "unsubscribed":
+                    cur.execute(
+                        "UPDATE subscribers SET status='pending', token=%s WHERE id=%s",
+                        (token, row["id"]),
+                    )
+                    conn.commit()
+                    _try_send_verification(body.email, token)
+                    return MessageOut(message="Re-subscribed — check your email.")
+                # pending — resend
+                _try_send_verification(body.email, row["token"])
+                return MessageOut(message="Confirmation email resent.")
+
+            cur.execute(
+                """INSERT INTO subscribers (email, source, token, ip_address, user_agent)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (body.email, body.source, token, ip, ua),
+            )
+            conn.commit()
+        _try_send_verification(body.email, token)
+        return MessageOut(message="Check your email to confirm.")
+
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        return MessageOut(message="Already subscribed.")
+    except Exception as exc:
+        conn.rollback()
+        log.error("subscribe error: %s", exc)
+        raise HTTPException(status_code=500, detail="Subscription failed.")
+
+
 @app.get("/api/confirm/{token}")
-def confirm(token: str):
+def confirm(token: str, conn: PgConn = Depends(get_pg_conn)):
     """
     Confirm a subscription via the emailed token.
     Always redirects — never returns JSON — so it works directly from email clients.
     """
-    try:
-        conn = _connect()
-    except Exception as exc:
-        log.error("DB connect failed during confirm: %s", exc)
-        return RedirectResponse(url=f"{SITE_URL}?confirmed=error", status_code=302)
-
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -279,25 +246,17 @@ def confirm(token: str):
                 (token,),
             )
             row = cur.fetchone()
-
             if not row:
-                log.warning("confirm: unknown token %s…", token[:12])
-                return RedirectResponse(url=f"{SITE_URL}?confirmed=invalid", status_code=302)
-
+                return RedirectResponse(f"{settings.site_url}/?confirmed=invalid")
             if row["status"] == "confirmed":
-                return RedirectResponse(url=f"{SITE_URL}?confirmed=already", status_code=302)
-
+                return RedirectResponse(f"{settings.site_url}/?confirmed=already")
             cur.execute(
-                "UPDATE subscribers SET status='confirmed', confirmed_at=NOW() WHERE id=%s",
+                "UPDATE subscribers SET status='confirmed', confirmed_at=now() WHERE id=%s",
                 (row["id"],),
             )
             conn.commit()
-            log.info("Confirmed subscriber id=%s", row["id"])
-            return RedirectResponse(url=f"{SITE_URL}?confirmed=1", status_code=302)
-
+        return RedirectResponse(f"{settings.site_url}/?confirmed=true")
     except Exception as exc:
         conn.rollback()
-        log.error("confirm error for token %s…: %s", token[:12], exc)
-        return RedirectResponse(url=f"{SITE_URL}?confirmed=error", status_code=302)
-    finally:
-        conn.close()
+        log.error("confirm error: %s", exc)
+        return RedirectResponse(f"{settings.site_url}/?confirmed=error")
