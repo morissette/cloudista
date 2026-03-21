@@ -108,12 +108,14 @@ Or trigger the **Populate Post Images** workflow from the Actions tab.
 | Workflow | Trigger | What it does |
 |---|---|---|
 | **Lint** | Push / PR | ruff, yamllint, shellcheck, eslint via reviewdog |
+| **Test** | Push / PR | pytest — all API unit tests must pass |
 | **Deploy to Production** | Push to `main` / manual | SSH deploy — auto-detects `--api` vs `--site` from changed paths |
 | **Populate Post Images** | Manual | Fetches Unsplash/Pexels images for posts missing one |
 
 Branch protection on `main`:
 - Direct pushes blocked — PRs required (enforced for all, including admins)
-- `Lint / lint` check must pass before merge
+- `Lint / lint` and `Test / test` checks must pass before merge
+- Verified (signed) commits required
 
 ---
 
@@ -137,6 +139,9 @@ SITE_URL=https://cloudista.org
 
 # Cloudflare Turnstile (optional — skipped if blank)
 TURNSTILE_SECRET=
+
+# SNS Topic ARN for SES bounce/complaint webhook (optional — skips topic validation if blank)
+SES_TOPIC_ARN=
 ```
 
 Missing required variables raise a `ValidationError` at startup with a clear message.
