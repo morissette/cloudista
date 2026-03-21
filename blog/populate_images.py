@@ -90,7 +90,7 @@ KEYWORD_MAP = [
 
     # Infrastructure as code
     (r"terraform|infrastructure.as.code|pulumi",
-     "server rack data center cloud"),
+     "devops automation workflow"),
     (r"refactor|monolith|migration|rewrite|legacy",
      "software architecture refactor"),
     (r"api.gateway|proxy|middleware|reverse.proxy",
@@ -100,7 +100,7 @@ KEYWORD_MAP = [
     (r"gcp|google.cloud|cloud.sql|cloud.kms|cloud.run|gcs|bigquery",
      "cloud computing data"),
     (r"aws|amazon|ec2|s3|lambda|cloudendure|cloudwatch",
-     "server rack data center cloud"),
+     "AWS cloud computing data center"),
     (r"azure|microsoft.cloud",
      "cloud computing office technology"),
     (r"ibm.cloud|ibm|acadia",
@@ -124,7 +124,7 @@ KEYWORD_MAP = [
     (r"golang|go.grpc|grpc",
      "programming code abstract"),
     (r"python|flask|fastapi|django",
-     "python programming code"),
+     "programming code screen laptop"),
     (r"powershell|windows.server|winrm",
      "computer office server technology"),
     (r"ruby|rails",
@@ -170,6 +170,10 @@ KEYWORD_MAP = [
     (r"custom.command|slash.command|productivity|workflow.automat",
      "productivity workflow automation"),
 
+    # Text editors & IDEs
+    (r"vim|neovim|emacs|text.editor|code.editor|vundle|youcomplet",
+     "code editor terminal dark screen"),
+
     # CMS / web / older posts
     (r"drupal|wordpress|cms|cpanel|plugin|tinymce|htmlpurifier",
      "web browser laptop development"),
@@ -184,7 +188,7 @@ KEYWORD_MAP = [
     (r"linkedin|social|profile",
      "professional networking business laptop"),
     (r"tesseract|ocr|image.recogni|vision",
-     "computer vision image recognition"),
+     "document scanning text camera"),
     (r"fuzz|test|selenium|unit.test|integration",
      "software testing quality assurance"),
     (r"generic|interface|pattern|design.pattern",
@@ -213,10 +217,10 @@ DEFAULT_QUERY = "technology server infrastructure"
 TAG_QUERY_MAP = {
     "kubernetes":   "cloud computing orchestration",
     "gcp":          "google cloud computing data center",
-    "aws":          "server rack data center cloud",
+    "aws":          "AWS cloud computing data center",
     "azure":        "cloud computing office technology",
     "docker":       "software container virtualization",
-    "terraform":    "cloud infrastructure architecture blueprint",
+    "terraform":    "devops automation workflow code",
     "security":     "security lock access control shield",
     "iam":          "security identity access control",
     "python":       "python programming code laptop",
