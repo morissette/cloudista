@@ -71,8 +71,10 @@ KEYWORD_MAP = [
      "data center resilience"),
     (r"helm|deploy.*kube|kube.*deploy|pre.helm",
      "software deployment automation"),
+    (r"opa|rego|policy.as.code|admission.control|gatekeeper",
+     "security policy compliance code"),
     (r"gke|kubernetes|k8s|kubectl|cluster|pod|namespace",
-     "container orchestration server technology"),
+     "server rack data center technology"),
     (r"docker|dockerfile|container.imag|artifact.registr|gcr",
      "software virtualization technology"),
 
@@ -215,7 +217,7 @@ DEFAULT_QUERY = "technology server infrastructure"
 
 # ── Tag / category slug → search query (used when KEYWORD_MAP has no match) ──
 TAG_QUERY_MAP = {
-    "kubernetes":   "container orchestration server technology",
+    "kubernetes":   "server rack data center technology",
     "gcp":          "google cloud computing data center",
     "aws":          "AWS cloud computing data center",
     "azure":        "cloud computing office technology",
