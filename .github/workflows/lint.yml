@@ -38,7 +38,7 @@ jobs:
           ruff check --output-format=rdjson . \
             | reviewdog -f=rdjson -name=ruff \
                 -reporter=${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }} \
-                -fail-on-error=true
+                -fail-level=any
 
       - name: YAML — yamllint
         uses: reviewdog/action-yamllint@v1
@@ -46,17 +46,18 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
           yamllint_flags: ".github/workflows/"
-          fail_on_error: "true"
+          fail_level: any
 
       - name: Shell — shellcheck
         uses: reviewdog/action-shellcheck@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
-          fail_on_error: "true"
+          fail_level: any
 
-      - name: Install eslint
-        run: npm install -g eslint @eslint/js
+      # eslint.config.mjs imports @eslint/js — needs local node_modules
+      - name: Install JS deps
+        run: npm ci
 
       - name: JavaScript — eslint
         uses: reviewdog/action-eslint@v1
@@ -64,4 +65,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
           eslint_flags: "site/main.js blog-site/blog.js"
-          fail_on_error: "true"
+          fail_level: any
