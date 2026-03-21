@@ -78,7 +78,7 @@ KEYWORD_MAP = [
 
     # CI/CD, pipelines & automation
     (r"jenkins|github.action|ci.cd|pipeline|deploy",
-     "automation pipeline technology"),
+     "software deployment automation workflow"),
     (r"argocd|gitops|terraform.auto.merg",
      "code pipeline automation"),
     (r"ansible|saltstack|puppet|chef|configuration.manag",
@@ -90,7 +90,7 @@ KEYWORD_MAP = [
 
     # Infrastructure as code
     (r"terraform|infrastructure.as.code|pulumi",
-     "cloud infrastructure architecture"),
+     "server rack data center cloud"),
     (r"refactor|monolith|migration|rewrite|legacy",
      "software architecture refactor"),
     (r"api.gateway|proxy|middleware|reverse.proxy",
@@ -108,11 +108,11 @@ KEYWORD_MAP = [
 
     # Observability & monitoring
     (r"opentelemetry|otel|tracing|jaeger|grafana|prometheus|sensu|nagios",
-     "monitoring dashboard analytics"),
+     "analytics metrics charts server"),
     (r"alert|threshold|pagerduty|on.?call",
      "monitoring alert dashboard"),
     (r"log|observ|metric",
-     "data analytics dashboard"),
+     "server monitoring terminal screen"),
 
     # Mobile & apps
     (r"android|ios|apk|mobile.app|swift|kotlin",
@@ -154,7 +154,7 @@ KEYWORD_MAP = [
     (r"chatops|slack|hipchat",
      "team communication collaboration"),
     (r"platform.engineer|sre|devops",
-     "engineering team technology"),
+     "software developer laptop workspace"),
     (r"crowdstrike|falcon|edr|endpoint",
      "cybersecurity protection"),
     (r"content.security|csp|xss|owasp",
@@ -172,7 +172,7 @@ KEYWORD_MAP = [
 
     # CMS / web / older posts
     (r"drupal|wordpress|cms|cpanel|plugin|tinymce|htmlpurifier",
-     "content management website development"),
+     "web browser laptop development"),
     (r"trello|jira|project.manag|ticket|board",
      "project management collaboration board"),
     (r"bootstrap|css|html|frontend|scroll|center|rotat",
@@ -222,7 +222,7 @@ TAG_QUERY_MAP = {
     "python":       "python programming code laptop",
     "golang":       "programming code abstract technology",
     "javascript":   "web development code browser",
-    "monitoring":   "monitoring dashboard analytics charts",
+    "monitoring":   "analytics metrics charts server screen",
     "database":     "database storage server racks",
     "postgresql":   "database storage server",
     "mysql":        "database server storage",
