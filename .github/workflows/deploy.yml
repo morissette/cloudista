@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
       - name: Set up SSH
         run: |
@@ -61,5 +63,8 @@ jobs:
       - name: Health check
         run: |
           sleep 3
-          curl -sf https://cloudista.org/api/health | python3 -m json.tool \
-            || echo "::warning::Health check failed — check server logs"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://cloudista.org/api/health)
+          echo "Health check status: $STATUS"
+          if [[ "$STATUS" != "200" ]]; then
+            echo "::warning::Health check returned $STATUS — check server logs"
+          fi
