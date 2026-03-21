@@ -43,3 +43,6 @@ blog/*.txt
 # Generated / build artifacts
 sitemap.xml
 review.md
+
+# Draft pages — pending review
+index2.html   # full "All Things Cloud" homepage draft, not yet launched
