@@ -35,10 +35,11 @@ scp_file() { scp -i "$SSH_KEY" -o StrictHostKeyChecking=no "$@"; }
 if [[ "$MODE" != "--api" ]]; then
   step "Deploying static site files..."
   # /www/ is root-owned — scp to tmp, then sudo mv into place
-  scp_file index.html style.css main.js robots.txt og-image.png \
-    privacy.html terms.html \
-    favicon.svg favicon.ico favicon-32x32.png \
-    favicon-192x192.png apple-touch-icon.png site.webmanifest \
+  scp_file site/index.html site/style.css site/main.js site/robots.txt \
+    site/privacy.html site/terms.html \
+    site/assets/og-image.png \
+    site/assets/favicon.svg site/assets/favicon.ico site/assets/favicon-32x32.png \
+    site/assets/favicon-192x192.png site/assets/apple-touch-icon.png site/assets/site.webmanifest \
     "$SSH_HOST:/tmp/"
   ssh_cmd "sudo mv /tmp/index.html /tmp/style.css /tmp/main.js \
     /tmp/robots.txt /tmp/og-image.png \
@@ -146,7 +147,7 @@ REMOTE
     || echo "    ! health check failed — check: sudo docker logs $CONTAINER"
 
   step "Updating nginx config..."
-  scp_file nginx-cloudista.conf "$SSH_HOST:/tmp/cloudista.conf"
+  scp_file infra/nginx-cloudista.conf "$SSH_HOST:/tmp/cloudista.conf"
   ssh_cmd "sudo cp /tmp/cloudista.conf /etc/nginx/conf.d/cloudista.conf"
   ssh_cmd "sudo nginx -t && sudo nginx -s reload"
   ok "nginx reloaded"

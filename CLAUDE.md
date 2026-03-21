@@ -23,11 +23,22 @@ cloudista/
 │   ├── index.html        # Listing page
 │   ├── post.html         # Single post page
 │   └── blog.js           # SPA logic
-├── scripts/              # Operational tools (deployed to /www/scripts/)
+├── site/                 # Landing site (deployed to web root)
+│   ├── assets/           # Favicons, og-image.png, site.webmanifest
+│   ├── index.html
+│   ├── privacy.html
+│   ├── terms.html
+│   ├── style.css
+│   ├── main.js
+│   └── robots.txt
+├── infra/                # Infrastructure config
+│   ├── nginx-cloudista.conf
+│   └── schema.sql        # Subscriber DB (MySQL) schema
+├── images/               # Post images (served at /images/)
+├── scripts/              # Operational one-off tools
 ├── .github/workflows/    # CI/CD
 ├── deploy.sh             # Deployment script (called by CI and make)
-├── Makefile              # All operations — prefer `make` over running scripts directly
-└── nginx-cloudista.conf  # nginx site config
+└── Makefile              # All operations — prefer `make` over running scripts directly
 ```
 
 ## Always use `make`

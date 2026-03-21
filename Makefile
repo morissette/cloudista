@@ -59,7 +59,7 @@ api: ## Deploy API only (rebuild Docker image + restart container)
 
 .PHONY: nginx
 nginx: ## Push nginx config and reload (no container rebuild)
-	$(SCP) nginx-cloudista.conf $(SSH_HOST):/tmp/cloudista.conf
+	$(SCP) infra/nginx-cloudista.conf $(SSH_HOST):/tmp/cloudista.conf
 	$(SSH) "sudo cp /tmp/cloudista.conf /etc/nginx/conf.d/cloudista.conf && \
 	        sudo nginx -t && sudo nginx -s reload && echo '✓ nginx reloaded'"
 
