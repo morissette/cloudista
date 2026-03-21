@@ -19,12 +19,26 @@ jobs:
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-      - name: Python — ruff
-        uses: reviewdog/action-ruff@v1
+      - name: Set up reviewdog
+        uses: reviewdog/action-setup@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
-          fail_on_error: "true"
+          reviewdog_version: latest
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ruff has no first-party reviewdog action; use CLI with rdjson output
+      - name: Python — ruff
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pip install ruff
+          ruff check --output-format=rdjson . \
+            | reviewdog -f=rdjson -name=ruff \
+                -reporter=${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }} \
+                -fail-on-error=true
 
       - name: YAML — yamllint
         uses: reviewdog/action-yamllint@v1
@@ -40,6 +54,9 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
           fail_on_error: "true"
+
+      - name: Install eslint
+        run: npm install -g eslint @eslint/js
 
       - name: JavaScript — eslint
         uses: reviewdog/action-eslint@v1
