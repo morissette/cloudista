@@ -45,7 +45,6 @@ DB_DSN  = os.environ.get(
 UTM               = "utm_source=cloudista&utm_medium=referral"
 IMG_PARAMS        = "w=900&q=80&fm=webp&auto=format&fit=crop&crop=entropy"
 PEXELS_IMG_PARAMS = "auto=compress&cs=tinysrgb&w=900&fit=crop"
-GOOGLE_CSE_ID     = "b52e07ccd0f05493a"
 
 # ── Keyword → search query map ────────────────────────────────────────────────
 # Matched against slug + title. First match wins.
@@ -431,47 +430,6 @@ def pexels_fetch(query: str, access_key: str, used_urls: set) -> dict | None:
         return None
 
 
-def google_fetch(query: str, api_key: str, cx: str, used_urls: set) -> dict | None:
-    """Search Google Custom Search for images. Returns first result not already in use."""
-    params = urllib.parse.urlencode({
-        "key":        api_key,
-        "cx":         cx,
-        "q":          query,
-        "searchType": "image",
-        "imgSize":    "LARGE",
-        "imgType":    "photo",
-        "num":        10,
-    })
-    url = f"https://www.googleapis.com/customsearch/v1?{params}"
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (compatible; cloudista-image-bot/1.0)",
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-            items = data.get("items", [])
-            if not items:
-                return None
-            for item in items:
-                base = _photo_base_url(item["link"])
-                if base not in used_urls:
-                    return item
-            print(f"    ⚠ All Google results for {query!r} already in use", file=sys.stderr)
-            return None
-    except urllib.error.HTTPError as e:
-        if e.code in (429, 403):
-            raise RateLimitError(f"Google CSE quota reached ({e.code})")
-        print(f"    ✗ Google CSE error: {e}", file=sys.stderr)
-        return None
-    except Exception as e:
-        print(f"    ✗ Google CSE error: {e}", file=sys.stderr)
-        return None
-
-
-def build_google_credit(item: dict) -> str:
-    ctx_link = item.get("image", {}).get("contextLink", "")
-    domain   = item.get("displayLink", ctx_link)
-    return f'Image via <a href="{ctx_link}" target="_blank" rel="noopener">{domain}</a>'
 
 
 def build_image_url(photo: dict) -> str:
@@ -521,12 +479,9 @@ def main():
         print("Error: UNSPLASH_ACCESS_KEY environment variable not set.", file=sys.stderr)
         print("  Get a free key at https://unsplash.com/developers", file=sys.stderr)
         sys.exit(1)
-    pexels_key  = os.environ.get("PEXELS_ACCESS_KEY", "").strip()
-    google_key  = os.environ.get("GOOGLE_API_KEY", "").strip()
+    pexels_key = os.environ.get("PEXELS_ACCESS_KEY", "").strip()
     if pexels_key:
         print("Pexels fallback enabled.")
-    if google_key:
-        print("Google CSE fallback enabled (100 req/day free).")
 
     conn = psycopg2.connect(DB_DSN, cursor_factory=psycopg2.extras.RealDictCursor)
     cur  = conn.cursor()
@@ -659,18 +614,6 @@ def main():
                             provider = "pexels"
                         if photo is not None:
                             provider = "unsplash" if photo is not None and "urls" in photo else "pexels"
-                    # Last resort — Google Custom Search (most specific, 100 req/day)
-                    if photo is None and google_key:
-                        for gq in (alt_query, f"devops {alt_query}"):
-                            if photo is not None:
-                                break
-                            print(f"           ↩ trying Google: {gq!r}")
-                            try:
-                                photo    = google_fetch(gq, google_key, GOOGLE_CSE_ID, used_urls)
-                                provider = "google"
-                            except RateLimitError:
-                                print("    ⚠ Google CSE daily quota reached", file=sys.stderr)
-                                break
         except RateLimitError:
             if pexels_key:
                 print(f"    ⚠ Unsplash rate limit — trying Pexels…")
@@ -702,10 +645,6 @@ def main():
                 img_url = build_pexels_image_url(photo)
                 credit  = build_pexels_credit(photo)
                 print(f"           ✓ [pexels] {photo['id']} by {photo['photographer']}")
-            elif provider == "google":
-                img_url = photo["link"]
-                credit  = build_google_credit(photo)
-                print(f"           ✓ [google] {photo['displayLink']} — {photo.get('title','')[:60]}")
             else:
                 img_url = build_image_url(photo)
                 credit  = build_credit(photo)
