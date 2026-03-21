@@ -72,7 +72,7 @@ KEYWORD_MAP = [
     (r"helm|deploy.*kube|kube.*deploy|pre.helm",
      "software deployment automation"),
     (r"gke|kubernetes|k8s|kubectl|cluster|pod|namespace",
-     "cloud computing orchestration"),
+     "container orchestration server technology"),
     (r"docker|dockerfile|container.imag|artifact.registr|gcr",
      "software virtualization technology"),
 
@@ -90,7 +90,7 @@ KEYWORD_MAP = [
 
     # Infrastructure as code
     (r"terraform|infrastructure.as.code|pulumi",
-     "devops automation workflow"),
+     "infrastructure code terminal laptop"),
     (r"refactor|monolith|migration|rewrite|legacy",
      "software architecture refactor"),
     (r"api.gateway|proxy|middleware|reverse.proxy",
@@ -188,7 +188,7 @@ KEYWORD_MAP = [
     (r"linkedin|social|profile",
      "professional networking business laptop"),
     (r"tesseract|ocr|image.recogni|vision",
-     "document scanning text camera"),
+     "document scanning text recognition"),
     (r"fuzz|test|selenium|unit.test|integration",
      "software testing quality assurance"),
     (r"generic|interface|pattern|design.pattern",
@@ -215,7 +215,7 @@ DEFAULT_QUERY = "technology server infrastructure"
 
 # ── Tag / category slug → search query (used when KEYWORD_MAP has no match) ──
 TAG_QUERY_MAP = {
-    "kubernetes":   "cloud computing orchestration",
+    "kubernetes":   "container orchestration server technology",
     "gcp":          "google cloud computing data center",
     "aws":          "AWS cloud computing data center",
     "azure":        "cloud computing office technology",
