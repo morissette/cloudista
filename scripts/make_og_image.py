@@ -7,8 +7,9 @@ Run:      python3 make_og_image.py
 Output:   og-image.png in the current directory
 """
 
-from PIL import Image, ImageDraw, ImageFont
 import sys
+
+from PIL import Image, ImageDraw, ImageFont
 
 WIDTH, HEIGHT = 1200, 630
 
@@ -73,7 +74,7 @@ def load_font(size, bold=False):
     for path in candidates:
         try:
             return ImageFont.truetype(path, size)
-        except (IOError, OSError):
+        except OSError:
             continue
     return ImageFont.load_default()
 

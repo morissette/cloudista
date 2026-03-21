@@ -3,13 +3,11 @@
 Fetch all mattharris.org blog posts from archive.org and save as .txt files.
 """
 
-import json
+import os
 import re
 import time
-import os
 import urllib.request
 from html.parser import HTMLParser
-
 
 POSTS = [
     ("2014/08/appcpanminus-skinny", "20140814015954"),
@@ -121,16 +119,22 @@ class ContentExtractor(HTMLParser):
             self.skip_depth = self.depth
             return
 
-        if tag == 'article' or (tag in ('div', 'section') and any(c in classes for c in ['post', 'hentry', 'entry', 'post-content', 'single-post'])):
+        article_classes = ['post', 'hentry', 'entry', 'post-content', 'single-post']
+        if tag == 'article' or (tag in ('div', 'section') and any(c in classes for c in article_classes)):
             self.in_article = True
             self.article_depth = self.depth
 
         if self.in_article:
-            if tag in ('h1', 'h2') and any(c in classes for c in ['entry-title', 'post-title', 'title']):
+            title_classes = ['entry-title', 'post-title', 'title']
+            content_classes = ['entry-content', 'post-content', 'post-body', 'the-content']
+            if tag in ('h1', 'h2') and any(c in classes for c in title_classes):
                 self.in_entry_title = True
-            elif tag == 'time' or (tag in ('span', 'p', 'div') and any(c in classes for c in ['entry-date', 'post-date', 'date', 'published'])):
+            elif tag == 'time' or (
+                tag in ('span', 'p', 'div')
+                and any(c in classes for c in ['entry-date', 'post-date', 'date', 'published'])
+            ):
                 self.in_entry_date = True
-            elif tag == 'div' and any(c in classes for c in ['entry-content', 'post-content', 'post-body', 'the-content']):
+            elif tag == 'div' and any(c in classes for c in content_classes):
                 self.in_entry_content = True
                 self.content_depth = self.depth
             elif tag == 'pre' and self.in_entry_content:
@@ -201,7 +205,7 @@ def fetch_wayback(slug, timestamp):
         with urllib.request.urlopen(req, timeout=30) as resp:
             html = resp.read().decode('utf-8', errors='replace')
             return html
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -232,7 +236,10 @@ def html_to_text(html, slug, timestamp):
     # try a simpler regex-based extraction
     if len(content) < 100:
         # Fallback: extract all text between common content markers
-        m = re.search(r'<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>(.*?)</div>\s*</div>\s*</article', html, re.DOTALL)
+        m = re.search(
+            r'<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>(.*?)</div>\s*</div>\s*</article',
+            html, re.DOTALL,
+        )
         if not m:
             m = re.search(r'<div[^>]*class="[^"]*post-content[^"]*"[^>]*>(.*?)</div>\s*</div>', html, re.DOTALL)
         if m:
@@ -299,7 +306,7 @@ def main():
 
         html = fetch_wayback(slug, timestamp)
         if not html:
-            print(f"  ERROR: Failed to fetch")
+            print("  ERROR: Failed to fetch")
             failed.append(slug)
             time.sleep(2)
             continue

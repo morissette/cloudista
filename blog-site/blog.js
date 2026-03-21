@@ -200,7 +200,7 @@ if (listingEl) {
           match.classList.add('cat-pill--active');
         }
       }
-    } catch (e) { /* non-critical */ }
+    } catch { /* non-critical */ }
   }
 
   function setCategory(slug, activePill) {
@@ -411,7 +411,7 @@ if (postContentEl) {
             </a>`).join('')}
         </div>`;
       section.hidden = false;
-    } catch (_) { /* non-critical */ }
+    } catch { /* non-critical */ }
   }
 
   // Restore "Back to Blog" to the page the user came from

@@ -18,15 +18,14 @@ from datetime import datetime
 import boto3
 import pymysql
 import pymysql.cursors
+from blog_routes import html_router as blog_html_router
+from blog_routes import router as blog_router
 from botocore.exceptions import BotoCoreError, ClientError
+from email_template import build_verification_email
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
-
-from email_template import build_verification_email
-from blog_routes import html_router as blog_html_router
-from blog_routes import router as blog_router
 
 # ---------------------------------------------------------------------------
 # Logging

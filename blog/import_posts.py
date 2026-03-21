@@ -7,7 +7,6 @@ then Markdown body content. Converts Markdown → HTML using Python-Markdown
 with fenced_code, codehilite, tables, and extra extensions.
 """
 
-import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -15,7 +14,6 @@ from pathlib import Path
 
 import markdown
 import psycopg2
-from psycopg2.extras import execute_values
 
 # ── Config ────────────────────────────────────────────────────────────────────
 

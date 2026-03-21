@@ -11,8 +11,8 @@ Process DynamoDB posts + archive posts:
 """
 
 import json
-import re
 import os
+import re
 from datetime import datetime
 
 OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -130,14 +130,20 @@ def html_to_markdown(html):
 
     html = re.sub(r'<pre[^>]*>\s*<code[^>]*>(.*?)</code>\s*</pre>',
                   process_code_block, html, flags=re.DOTALL)
-    html = re.sub(r'<pre[^>]*>(.*?)</pre>',
-                  lambda m: '\n```\n' + re.sub(r'<[^>]+>', '', m.group(1)).replace('&lt;','<').replace('&gt;','>').replace('&amp;','&') + '\n```\n',
-                  html, flags=re.DOTALL)
+    def _pre_to_fence(m):
+        inner = re.sub(r'<[^>]+>', '', m.group(1))
+        inner = inner.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
+        return '\n```\n' + inner + '\n```\n'
+
+    html = re.sub(r'<pre[^>]*>(.*?)</pre>', _pre_to_fence, html, flags=re.DOTALL)
 
     # Inline code
-    html = re.sub(r'<code[^>]*>(.*?)</code>',
-                  lambda m: '`' + re.sub(r'<[^>]+>', '', m.group(1)).replace('&lt;','<').replace('&gt;','>').replace('&amp;','&') + '`',
-                  html, flags=re.DOTALL)
+    def _code_to_backtick(m):
+        inner = re.sub(r'<[^>]+>', '', m.group(1))
+        inner = inner.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
+        return '`' + inner + '`'
+
+    html = re.sub(r'<code[^>]*>(.*?)</code>', _code_to_backtick, html, flags=re.DOTALL)
 
     # Headings
     for i in range(1, 7):
@@ -231,7 +237,6 @@ def apply_name_pronoun_updates(text):
 def dynamo_item_to_text(item):
     """Convert a DynamoDB item to clean text."""
     title = item.get('title', {}).get('S', '')
-    link = item.get('link', {}).get('S', '')
     content_html = item.get('content', {}).get('S', '')
     author = item.get('author', {}).get('S', 'Marie Harris')
     ts = int(item.get('timestamp', {}).get('N', 0))
@@ -250,7 +255,7 @@ def dynamo_item_to_text(item):
     out += f'Author: {author}\n'
     if date_str:
         out += f'Date: {date_str}\n'
-    out += f'Source: DynamoDB\n'
+    out += 'Source: DynamoDB\n'
     out += '\n' + '=' * 60 + '\n\n'
     out += content
 
@@ -275,7 +280,7 @@ def read_archive_file(slug):
     filename = archive_slug_to_filename(slug)
     filepath = os.path.join(OUTPUT_DIR, filename)
     if os.path.exists(filepath):
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             return f.read()
     return None
 
@@ -304,13 +309,13 @@ def merge_posts(archive_text, dynamo_text, title, date_str, link, archive_slug):
     # Use DynamoDB content as primary (it's the actual stored version)
     # but note the archive URL
     out = f'Title: {title}\n'
-    out += f'Author: Marie Harris\n'
+    out += 'Author: Marie Harris\n'
     if date_str:
         out += f'Date: {date_str}\n'
     out += f'URL: {archive_url}\n'
     if archive_wbm:
         out += f'Archive: {archive_wbm}\n'
-    out += f'Source: combined (DynamoDB + archive.org)\n'
+    out += 'Source: combined (DynamoDB + archive.org)\n'
     out += '\n' + '=' * 60 + '\n\n'
 
     # Use DynamoDB content as it's more complete
@@ -386,7 +391,7 @@ def main():
         if not fname.endswith('.txt'):
             continue
         fpath = os.path.join(OUTPUT_DIR, fname)
-        with open(fpath, 'r', encoding='utf-8') as f:
+        with open(fpath, encoding='utf-8') as f:
             text = f.read()
         updated = apply_name_pronoun_updates(text)
         if updated != text:

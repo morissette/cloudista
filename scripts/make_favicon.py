@@ -11,10 +11,9 @@ Outputs (written next to this script):
 Requirements: Pillow  (pip install Pillow)
 """
 
-import math
 from pathlib import Path
-from PIL import Image, ImageDraw
 
+from PIL import Image, ImageDraw
 
 # ---------------------------------------------------------------------------
 # Gradient helpers

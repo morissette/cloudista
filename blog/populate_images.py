@@ -23,18 +23,17 @@ Image URLs:
 """
 
 import argparse
+import json
 import os
 import re
 import sys
 import time
+import urllib.parse
+import urllib.request
 from collections import Counter
-from pathlib import Path
 
 import psycopg2
 import psycopg2.extras
-import urllib.request
-import urllib.parse
-import json
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -253,7 +252,6 @@ TAG_QUERY_MAP = {
     "grafana":      "analytics dashboard visualization charts",
     "ec2":          "cloud server computing virtual machine",
     "s3":           "cloud storage data bucket",
-    "gitops":       "git pipeline automation workflow",
 }
 
 # ── Stop words for keyword extraction ─────────────────────────────────────────
@@ -471,7 +469,10 @@ def main():
     parser.add_argument("--slug",           type=str, default="", help="Process a single post by slug")
     parser.add_argument("--dry-run",        action="store_true",  help="Print queries without updating DB")
     parser.add_argument("--refetch",        action="store_true",  help="Re-fetch images even if post already has one")
-    parser.add_argument("--fix-duplicates", action="store_true",  help="Clear duplicate image URLs and re-fetch unique ones")
+    parser.add_argument(
+        "--fix-duplicates", action="store_true",
+        help="Clear duplicate image URLs and re-fetch unique ones",
+    )
     args = parser.parse_args()
 
     access_key = os.environ.get("UNSPLASH_ACCESS_KEY", "").strip()
@@ -558,7 +559,8 @@ def main():
         posts = cur.fetchall()
     else:
         cur.execute(
-            "SELECT id, slug, title, content_md FROM posts WHERE status = 'published' AND image_url IS NULL ORDER BY published_at DESC"
+            "SELECT id, slug, title, content_md FROM posts"
+            " WHERE status = 'published' AND image_url IS NULL ORDER BY published_at DESC"
         )
         posts = cur.fetchall()
 
@@ -616,12 +618,12 @@ def main():
                             provider = "unsplash" if photo is not None and "urls" in photo else "pexels"
         except RateLimitError:
             if pexels_key:
-                print(f"    ⚠ Unsplash rate limit — trying Pexels…")
+                print("    ⚠ Unsplash rate limit — trying Pexels…")
                 try:
                     photo    = pexels_fetch(query, pexels_key, used_urls)
                     provider = "pexels"
                 except RateLimitError:
-                    print(f"           ✗ Both Unsplash and Pexels rate-limited — skipping", file=sys.stderr)
+                    print("           ✗ Both Unsplash and Pexels rate-limited — skipping", file=sys.stderr)
                     errors += 1
                     continue
             else:
@@ -633,12 +635,12 @@ def main():
                     photo    = unsplash_fetch(query, access_key, used_urls)
                     provider = "unsplash"
                 except RateLimitError:
-                    print(f"           ✗ Still rate-limited after wait — skipping", file=sys.stderr)
+                    print("           ✗ Still rate-limited after wait — skipping", file=sys.stderr)
                     errors += 1
                     continue
 
         if not photo:
-            print(f"           ✗ No results — skipping")
+            print("           ✗ No results — skipping")
             errors += 1
         else:
             if provider == "pexels":
@@ -664,7 +666,7 @@ def main():
         # Unsplash free tier: 50 req/hour. 1.5s delay = ~40 req/min, well under limit.
         if i < total:
             if i % 45 == 0:
-                print(f"\n  ⚠  Pausing 90s to respect Unsplash rate limit (50 req/hr)…\n")
+                print("\n  ⚠  Pausing 90s to respect Unsplash rate limit (50 req/hr)…\n")
                 time.sleep(90)
             else:
                 time.sleep(1.5)

@@ -44,14 +44,16 @@ with env_path.open() as f:
 
 # ---------------------------------------------------------------------------
 # Imports (after env is set)
+# .env must be loaded before these modules are imported so they pick up the
+# correct environment variables — E402 is intentional here.
 # ---------------------------------------------------------------------------
-import pymysql
-import pymysql.cursors
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+import boto3  # noqa: E402
+import pymysql  # noqa: E402
+import pymysql.cursors  # noqa: E402
+from botocore.exceptions import BotoCoreError, ClientError  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
-from email_template import build_verification_email
+from email_template import build_verification_email  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Logging

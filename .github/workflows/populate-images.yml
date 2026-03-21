@@ -1,6 +1,7 @@
+---
 name: Populate Post Images
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       slug:
@@ -68,8 +69,9 @@ jobs:
       - name: Populate images
         env:
           UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
-          PEXELS_ACCESS_KEY:   ${{ secrets.PEXELS_ACCESS_KEY }}
-          POPULATE_DB_DSN:     postgresql://cloudista:${{ secrets.BLOG_DB_PASSWORD }}@localhost:5433/cloudista
+          PEXELS_ACCESS_KEY: ${{ secrets.PEXELS_ACCESS_KEY }}
+          POPULATE_DB_DSN: >-
+            postgresql://cloudista:${{ secrets.BLOG_DB_PASSWORD }}@localhost:5433/cloudista
         run: |
           cd blog
           python3 populate_images.py ${{ steps.args.outputs.flags }}

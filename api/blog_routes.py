@@ -12,7 +12,6 @@ import json as _json
 import logging
 import os
 from datetime import datetime
-from typing import Optional
 
 import psycopg2
 import psycopg2.extras
@@ -48,15 +47,15 @@ class PostSummary(BaseModel):
     uuid:         str
     title:        str
     slug:         str
-    excerpt:      Optional[str]
-    image_url:    Optional[str]
+    excerpt:      str | None
+    image_url:    str | None
     author:       str
-    published_at: Optional[datetime]
+    published_at: datetime | None
 
 
 class PostDetail(PostSummary):
     content_html:  str
-    image_credit:  Optional[str]
+    image_credit:  str | None
     tags:          list[str] = []
     categories:    list[str] = []
 
@@ -71,8 +70,8 @@ class CategoryOut(BaseModel):
     id:          int
     name:        str
     slug:        str
-    description: Optional[str]
-    parent_id:   Optional[int]
+    description: str | None
+    parent_id:   int | None
 
 
 class PostList(BaseModel):
@@ -147,8 +146,8 @@ def search_posts(
 def list_posts(
     page:     int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
-    tag:      Optional[str] = Query(default=None),
-    category: Optional[str] = Query(default=None),
+    tag:      str | None = Query(default=None),
+    category: str | None = Query(default=None),
 ):
     """
     Return a paginated list of published posts, newest first.
@@ -468,6 +467,12 @@ def sitemap():
 
 html_router = APIRouter(tags=["blog"])
 
+_GOOGLE_FONTS_URL = (
+    "https://fonts.googleapis.com/css2?family=Inter:opsz,wght"
+    "@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900"
+    "&family=JetBrains+Mono:wght@500&display=swap"
+)
+
 _POST_HTML_TEMPLATE = """\
 <!DOCTYPE html>
 <html lang="en">
@@ -499,7 +504,7 @@ _POST_HTML_TEMPLATE = """\
   <link rel="preload" as="style" href="/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link href="{google_fonts_url}" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
