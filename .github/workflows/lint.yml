@@ -9,33 +9,42 @@ name: Lint
 jobs:
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+
     steps:
       - uses: actions/checkout@v4
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Python — ruff
-        run: |
-          pip install ruff
-          ruff check .
+        uses: reviewdog/action-ruff@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
+          fail_on_error: "true"
 
       - name: YAML — yamllint
-        run: |
-          pip install yamllint
-          yamllint .github/workflows/
+        uses: reviewdog/action-yamllint@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
+          yamllint_flags: ".github/workflows/"
+          fail_on_error: "true"
 
       - name: Shell — shellcheck
-        uses: ludeeus/action-shellcheck@master
+        uses: reviewdog/action-shellcheck@v1
         with:
-          scandir: '.'
-          severity: warning
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
+          fail_on_error: "true"
 
       - name: JavaScript — eslint
-        run: |
-          npm install -g eslint @eslint/js
-          npx eslint site/main.js blog-site/blog.js
+        uses: reviewdog/action-eslint@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
+          eslint_flags: "site/main.js blog-site/blog.js"
+          fail_on_error: "true"
