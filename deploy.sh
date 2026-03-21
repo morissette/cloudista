@@ -26,7 +26,8 @@ MODE="${1:-}"
 step() { echo ""; echo "==> $*"; }
 ok()   { echo "    ✓ $*"; }
 
-# Trust the server's host key — added on first run, refused if it changes (prevents MITM)
+# Trust-on-first-use (TOFU): add host key on first run; refuse if it changes thereafter.
+# Note: the first run is not MITM-protected — verify the fingerprint manually if needed.
 _trust_host() {
   local known="$HOME/.ssh/known_hosts"
   local host="${SSH_HOST#*@}"  # strip user@ prefix

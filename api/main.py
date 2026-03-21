@@ -130,11 +130,11 @@ def _make_token(email: str) -> str:
 
 
 def _verify_turnstile_sync(token: str, ip: str) -> TurnstileResult:
-    payload = urllib.parse.urlencode({
-        "secret": settings.turnstile_secret,
-        "response": token,
-        "remoteip": ip,
-    }).encode()
+    params: dict = {"secret": settings.turnstile_secret, "response": token}
+    # Only include remoteip when we have a real IP — Cloudflare rejects non-IP values
+    if ip and ip != "unknown":
+        params["remoteip"] = ip
+    payload = urllib.parse.urlencode(params).encode()
     try:
         with urllib.request.urlopen(
             "https://challenges.cloudflare.com/turnstile/v0/siteverify",
@@ -268,7 +268,7 @@ async def health():
     )
 
 
-@app.post("/api/subscribe", response_model=MessageOut, status_code=200)
+@app.post("/api/subscribe", response_model=MessageOut, status_code=201)
 @limiter.limit("5/minute")
 async def subscribe(
     request: Request,
@@ -307,12 +307,14 @@ async def subscribe(
 
             if row:
                 if row["status"] == "confirmed":
+                    response.status_code = 200
                     return MessageOut(message="Already confirmed.")
 
                 if row["status"] == "unsubscribed":
                     t = _make_token(body.email)
                     await conn.execute(
-                        "UPDATE subscribers SET status='pending', token=$1, token_expires_at=$2 WHERE id=$3",
+                        "UPDATE subscribers SET status='pending', token=$1, token_expires_at=$2,"
+                        " confirmed_at=NULL, unsubscribed_at=NULL WHERE id=$3",
                         t,
                         datetime.now(timezone.utc) + _TOKEN_TTL,
                         row["id"],
@@ -351,6 +353,7 @@ async def subscribe(
             # Token collision (astronomically rare) — treat as transient error
             log.error("Token uniqueness violation for %s — retry", body.email)
             raise HTTPException(status_code=500, detail="Subscription failed, please retry.")
+        response.status_code = 200
         return MessageOut(message="Already subscribed.")
     except Exception as exc:
         log.error("subscribe error: %s", exc)
@@ -361,9 +364,10 @@ async def subscribe(
     await _try_send_verification(body.email, send_token)
 
     if resend_msg is None:
-        response.status_code = 201
+        # status_code=201 from decorator — new subscriber created
         return MessageOut(message="Check your email to confirm.")
 
+    response.status_code = 200  # resend / re-subscribe — idempotent, not a new resource
     return MessageOut(message=resend_msg)
 
 

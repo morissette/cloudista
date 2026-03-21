@@ -163,6 +163,9 @@ def import_posts(blog_dir: Path, dsn: str, dry_run: bool = False):
 
         author_id = author_map.get(post["author_name"])
         if author_id is None:
+            if dry_run:
+                print(f"  [dry] {path.name} → slug={post['slug']!r} (unknown author: {post['author_name']!r})")
+                continue
             # Insert unknown author on the fly
             cur.execute(
                 "INSERT INTO authors (name, email) VALUES (%s, %s) RETURNING id",
