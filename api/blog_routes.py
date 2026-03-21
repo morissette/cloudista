@@ -12,8 +12,8 @@ import json as _json
 import logging
 
 import asyncpg
-from dependencies import get_pg_conn
-from fastapi import APIRouter, Depends, HTTPException, Query
+from dependencies import get_pg_conn, limiter
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from schemas import CategoryOut, PostDetail, PostList, PostSummary, TagOut
 
@@ -26,7 +26,9 @@ router = APIRouter(prefix="/api", tags=["blog"])
 
 
 @router.get("/search", response_model=PostList)
+@limiter.limit("30/minute")
 async def search_posts(
+    request: Request,
     q: str = Query(..., min_length=2, max_length=200),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
@@ -482,7 +484,7 @@ def _render_post_html(row: dict, tags: list, categories: list) -> str:
 
     if image:
         credit_html = (
-            f'<p class="post-hero__credit" id="post-hero-credit">{credit}</p>'
+            f'<p class="post-hero__credit" id="post-hero-credit">{e(credit)}</p>'
             if credit
             else ""
         )

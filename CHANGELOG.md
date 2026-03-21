@@ -9,27 +9,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased] — refactor/python-backend
 
 ### Added
-- `api/config.py` — Pydantic `BaseSettings` for all configuration; `ValidationError` at startup if required env vars missing
-- `api/dependencies.py` — `ThreadedConnectionPool` (min 2, max 10) with FastAPI `Depends()` for automatic connection lifecycle; replaces per-request connect/close in every route
-- `api/schemas.py` — all Pydantic request/response models consolidated; `response_model` on all routes
+- `api/config.py` — Pydantic `BaseSettings` for all configuration; `ValidationError` at startup if required env vars missing; `ses_topic_arn` for SNS topic allowlist
+- `api/dependencies.py` — asyncpg connection pool (min 2, max 10) with FastAPI `Depends()` for automatic connection lifecycle; shared `limiter` and `_real_ip` used across routers
+- `api/schemas.py` — all Pydantic request/response models consolidated; `response_model` on all routes; `source` field restricted to `^[a-z0-9_]+$`
 - `TurnstileResult` enum (`VALID` / `INVALID` / `UNAVAILABLE`) — Cloudflare outage now fails open instead of blocking all subscriptions
-- `infra/schema.sql` rewritten for PostgreSQL — `GENERATED ALWAYS AS IDENTITY`, `TIMESTAMPTZ`, `CHECK` constraint instead of `ENUM`, no charset declarations
+- `infra/schema.sql` — `token_expires_at TIMESTAMPTZ` column added; redundant `idx_subscribers_token` index removed (covered by UNIQUE constraint)
 - `scripts/migrate_subscribers_to_pg.py` — one-time migration script to move subscriber data from MySQL → PostgreSQL; idempotent (`ON CONFLICT DO NOTHING`)
+- `GET /api/unsubscribe/{token}` — one-click unsubscribe endpoint; token included in every verification email footer
+- `POST /api/ses-webhook` — SNS bounce/complaint handler with RSA-SHA1 signature verification and SSRF-safe cert URL validation
+- Rate limiting via `slowapi`: `5/minute` on `/api/subscribe`, `30/minute` on `/api/search`
+- Token expiry: 72-hour TTL on all verification tokens; expired tokens redirect to `?confirmed=expired`
+- Token rotation: resend always issues a new token, invalidating any previously sent link
+- Request-ID middleware: echoes/generates `X-Request-ID`; strips control characters to prevent CRLF injection
+- Unit tests (`api/tests/`) with pass/fail/edge coverage for all routes; `pytest-asyncio` + `httpx` test client; asyncpg stubbed for CI without a live DB
+- `.github/workflows/test.yml` — test CI; must pass before merge to main
+- Branch protection: `lint`, `test`, and `required_signatures` (verified commits) all enforced on main
 
 ### Changed
 - **Single database** — MySQL/MariaDB subscriber DB removed; `subscribers` table now lives in the same PostgreSQL instance as blog content
-- `api/main.py` — FastAPI `lifespan` context manager initialises/closes the PG pool; subscriber routes use `Depends(get_pg_conn)` from `dependencies.py`
-- `api/blog_routes.py` — all routes use `Depends(get_pg_conn)`; schemas imported from `schemas.py`
-- `deploy.sh` — MySQL user-creation block replaced with a simple `.env` scaffold (PG vars only)
-- `blog/import_posts.py` — per-post commits instead of single end-of-loop commit; `updated` counter tracked separately from `inserted`; hardcoded DSN removed
-- `blog/tag_posts.py` — `run()` split into `seed_taxonomy()` and `apply_tags()`; per-post transactions replace bulk delete-and-reinsert
-- `blog/populate_images.py` — fetch retry waterfall extracted into `_fetch_with_fallback()`; hardcoded DSN fallback removed; provider detection bug fixed
+- **All routes async** — `psycopg2` replaced with `asyncpg`; all SQL uses `$N` positional parameters; routes are `async def`
+- `api/main.py` — FastAPI `lifespan` context manager initialises/closes the PG pool; all routes use `Depends(get_pg_conn)`; `asyncio.to_thread()` for sync SES/Turnstile calls
+- `api/blog_routes.py` — full async/asyncpg conversion; `image_credit` escaped with `html.escape()` in server-rendered HTML (was stored XSS)
+- `api/email_template.py` — unsubscribe link added to HTML footer and plain-text; "72 hours" expiry note added
+- `deploy.sh` — `StrictHostKeyChecking=no` removed; `_trust_host()` populates `~/.ssh/known_hosts` via `ssh-keyscan`; `.env` scaffold warns if `BLOG_DB_PASSWORD` is empty; `SES_TOPIC_ARN` added to scaffold
+- `.github/workflows/populate-images.yml` — shell injection fix: slug input passed via `env:` block, not inline `${{ inputs.slug }}`; `StrictHostKeyChecking=no` removed
+- `infra/nginx-cloudista.conf` — Cloudflare real-IP module configured (`set_real_ip_from` for all CF CIDRs); `CF-Connecting-IP` cleared on all proxy locations; full security header set added (CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy)
+- `api/main.py` confirm route — only `pending` rows can be confirmed; `confirmed` and `unsubscribed` both redirect to `?confirmed=already`
 
 ### Fixed
-- `api/main.py` subscriber re-send path — `token` column was missing from `SELECT id, status FROM subscribers`; accessing `row["token"]` raised `KeyError` in production for any subscriber who submitted twice
+- `api/main.py` subscriber re-send path — `token` column was missing from SELECT; accessing `row["token"]` raised `KeyError` in production for any subscriber who submitted twice
 - `blog/populate_images.py` — inverted provider detection (`"urls" in photo` check was backwards, misidentifying Pexels photos as Unsplash)
+- Stored XSS in `blog_routes.py` — `image_credit` field rendered unescaped in server-rendered post HTML
+- Rate limit bypass — `CF-Connecting-IP` was used as rate-limit key; clients bypassing Cloudflare could inject arbitrary IPs; switched to nginx-set `X-Real-IP`
+- SSRF in SNS webhook — `startswith("https://sns.amazonaws.com/")` was bypassable; replaced with `re.fullmatch` on parsed hostname
 
 ### Removed
+- `psycopg2-binary` dependency from `api/Pipfile` (replaced by `asyncpg`)
 - `pymysql` dependency from `api/Pipfile`
 - MySQL-specific env vars (`DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT`)
 - MySQL `GRANT ... IDENTIFIED BY` user-creation logic from `deploy.sh`

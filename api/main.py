@@ -9,9 +9,11 @@ GET  /api/health                 – liveness probe (validates DB connectivity)
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
+import re
 import urllib.parse
 import urllib.request
 import uuid
@@ -25,13 +27,16 @@ from blog_routes import html_router as blog_html_router
 from blog_routes import router as blog_router
 from botocore.exceptions import BotoCoreError, ClientError
 from config import settings
-from dependencies import close_pool, get_pg_conn, init_pool
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.x509 import load_pem_x509_certificate
+from dependencies import _real_ip, close_pool, get_pg_conn, init_pool, limiter
 from email_template import build_verification_email
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from schemas import HealthOut, MessageOut, SubscribeIn
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 # ---------------------------------------------------------------------------
@@ -48,6 +53,13 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _TOKEN_TTL = timedelta(hours=72)
 
+# Simple in-process SNS cert cache (keyed by URL; certs are long-lived)
+_SNS_CERT_CACHE: dict[str, bytes] = {}
+
+# SNS field order for canonical string construction (per AWS spec)
+_SNS_NOTIFICATION_FIELDS = ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"]
+_SNS_SUBSCRIPTION_FIELDS = ["Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type"]
+
 
 # ---------------------------------------------------------------------------
 # Turnstile result enum
@@ -56,20 +68,6 @@ class TurnstileResult(Enum):
     VALID = "valid"
     INVALID = "invalid"
     UNAVAILABLE = "unavailable"
-
-
-# ---------------------------------------------------------------------------
-# Rate limiter (keyed by real client IP)
-# ---------------------------------------------------------------------------
-def _real_ip(request: Request) -> str:
-    return (
-        request.headers.get("CF-Connecting-IP")
-        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or (request.client.host if request.client else "unknown")
-    )
-
-
-limiter = Limiter(key_func=_real_ip)
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +111,9 @@ _ses = boto3.client("ses", region_name=settings.aws_region)
 # ---------------------------------------------------------------------------
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
-    req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    raw = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    # Strip control characters to prevent CRLF header injection
+    req_id = re.sub(r"[^\x20-\x7E]", "", raw)[:64] or str(uuid.uuid4())
     request.state.request_id = req_id
     response = await call_next(request)
     response.headers["X-Request-ID"] = req_id
@@ -183,6 +183,62 @@ async def _try_send_verification(email: str, token: str) -> None:
         log.error("SES send failed for %s: %s", email, exc)
 
 
+def _sns_canonical_string(body: dict) -> str:
+    """Build the canonical string for SNS signature verification (per AWS spec)."""
+    msg_type = body.get("Type", "")
+    if msg_type == "Notification":
+        fields = _SNS_NOTIFICATION_FIELDS
+    elif msg_type in ("SubscriptionConfirmation", "UnsubscribeConfirmation"):
+        fields = _SNS_SUBSCRIPTION_FIELDS
+    else:
+        return ""
+    return "".join(f"{f}\n{body[f]}\n" for f in fields if f in body)
+
+
+def _verify_sns_signature(body: dict) -> bool:
+    """
+    Verify an SNS message signature using the certificate published by AWS.
+
+    Steps:
+    1. Validate SigningCertURL is https://*.sns.*.amazonaws.com (prevents SSRF)
+    2. Fetch and cache the signing certificate
+    3. Verify RSA-SHA1 signature over the canonical string
+    """
+    cert_url = body.get("SigningCertURL", "")
+    parsed = urllib.parse.urlparse(cert_url)
+
+    # Strict hostname validation — must be exactly sns.<region>.amazonaws.com
+    if parsed.scheme != "https":
+        log.warning("SNS cert URL is not HTTPS: %s", cert_url)
+        return False
+    if not re.fullmatch(r"sns\.[a-z0-9-]+\.amazonaws\.com", parsed.hostname or ""):
+        log.warning("SNS cert URL hostname failed validation: %s", parsed.hostname)
+        return False
+
+    canonical = _sns_canonical_string(body)
+    if not canonical:
+        return False
+
+    cert_pem = _SNS_CERT_CACHE.get(cert_url)
+    if cert_pem is None:
+        try:
+            with urllib.request.urlopen(cert_url, timeout=5) as resp:
+                cert_pem = resp.read()
+            _SNS_CERT_CACHE[cert_url] = cert_pem
+        except Exception as exc:
+            log.warning("SNS cert fetch failed: %s", exc)
+            return False
+
+    try:
+        cert = load_pem_x509_certificate(cert_pem)
+        sig = base64.b64decode(body.get("Signature", ""))
+        cert.public_key().verify(sig, canonical.encode("utf-8"), padding.PKCS1v15(), hashes.SHA1())
+        return True
+    except Exception as exc:
+        log.warning("SNS signature verification failed: %s", exc)
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -212,11 +268,12 @@ async def health():
     )
 
 
-@app.post("/api/subscribe", response_model=MessageOut)
+@app.post("/api/subscribe", response_model=MessageOut, status_code=200)
 @limiter.limit("5/minute")
 async def subscribe(
     request: Request,
     body: SubscribeIn,
+    response: Response,
     conn: asyncpg.Connection = Depends(get_pg_conn),
 ):
     """
@@ -238,9 +295,8 @@ async def subscribe(
             if result is TurnstileResult.INVALID:
                 raise HTTPException(status_code=400, detail="CAPTCHA verification failed.")
 
-    new_token: str | None = None
-    resend_token: str | None = None
-    resend_msg: str = ""
+    send_token: str | None = None
+    resend_msg: str | None = None  # None signals new insert (→ 201)
 
     try:
         async with conn.transaction():
@@ -251,7 +307,7 @@ async def subscribe(
 
             if row:
                 if row["status"] == "confirmed":
-                    return JSONResponse(status_code=200, content={"message": "Already confirmed."})
+                    return MessageOut(message="Already confirmed.")
 
                 if row["status"] == "unsubscribed":
                     t = _make_token(body.email)
@@ -261,7 +317,7 @@ async def subscribe(
                         datetime.now(timezone.utc) + _TOKEN_TTL,
                         row["id"],
                     )
-                    resend_token = t
+                    send_token = t
                     resend_msg = "Re-subscribed — check your email."
                 else:
                     # pending — always rotate token on resend so old links are invalidated
@@ -272,7 +328,7 @@ async def subscribe(
                         datetime.now(timezone.utc) + _TOKEN_TTL,
                         row["id"],
                     )
-                    resend_token = t
+                    send_token = t
                     resend_msg = "Confirmation email resent."
             else:
                 t = _make_token(body.email)
@@ -286,7 +342,8 @@ async def subscribe(
                     ip,
                     ua,
                 )
-                new_token = t
+                send_token = t
+                # resend_msg stays None → caller sets 201
 
     except asyncpg.UniqueViolationError as exc:
         constraint = exc.constraint_name or ""
@@ -294,17 +351,20 @@ async def subscribe(
             # Token collision (astronomically rare) — treat as transient error
             log.error("Token uniqueness violation for %s — retry", body.email)
             raise HTTPException(status_code=500, detail="Subscription failed, please retry.")
-        return JSONResponse(status_code=200, content={"message": "Already subscribed."})
+        return MessageOut(message="Already subscribed.")
     except Exception as exc:
         log.error("subscribe error: %s", exc)
         raise HTTPException(status_code=500, detail="Subscription failed.")
 
-    if new_token:
-        await _try_send_verification(body.email, new_token)
-        return JSONResponse(status_code=201, content={"message": "Check your email to confirm."})
+    assert send_token is not None  # noqa: S101 — all non-early-return paths set send_token
 
-    await _try_send_verification(body.email, resend_token)  # type: ignore[arg-type]
-    return JSONResponse(status_code=200, content={"message": resend_msg})
+    await _try_send_verification(body.email, send_token)
+
+    if resend_msg is None:
+        response.status_code = 201
+        return MessageOut(message="Check your email to confirm.")
+
+    return MessageOut(message=resend_msg)
 
 
 @app.get("/api/confirm/{token}")
@@ -320,7 +380,8 @@ async def confirm(token: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
         )
         if not row:
             return RedirectResponse(url=f"{settings.site_url}/?confirmed=invalid", status_code=302)
-        if row["status"] == "confirmed":
+        # Only pending rows can be confirmed; confirmed/unsubscribed both go to 'already'
+        if row["status"] != "pending":
             return RedirectResponse(url=f"{settings.site_url}/?confirmed=already", status_code=302)
         if (
             row["token_expires_at"] is not None
@@ -371,10 +432,7 @@ async def ses_webhook(request: Request, conn: asyncpg.Connection = Depends(get_p
 
     Setup: configure an SES notification rule that publishes to an SNS topic,
     then subscribe this endpoint as an HTTPS subscriber to that topic.
-
-    NOTE: SNS message signature verification is not yet implemented.
-    Until it is, restrict access to this endpoint at the nginx/firewall level
-    to SNS IP ranges (published at https://ip-ranges.amazonaws.com/ip-ranges.json).
+    All incoming messages are signature-verified against the AWS-published cert.
     """
     try:
         body = await request.json()
@@ -383,19 +441,38 @@ async def ses_webhook(request: Request, conn: asyncpg.Connection = Depends(get_p
 
     msg_type = body.get("Type", "")
 
-    # SNS first sends a SubscriptionConfirmation — auto-confirm from amazonaws.com URLs only.
+    # SNS first sends a SubscriptionConfirmation — auto-confirm only after verifying signature.
     if msg_type == "SubscriptionConfirmation":
+        if not _verify_sns_signature(body):
+            log.warning("SNS SubscriptionConfirmation failed signature check — rejected")
+            raise HTTPException(status_code=400, detail="Invalid SNS signature.")
         subscribe_url = body.get("SubscribeURL", "")
-        if subscribe_url.startswith("https://sns.amazonaws.com/"):
+        parsed = urllib.parse.urlparse(subscribe_url)
+        # Only follow confirmation URLs from sns.amazonaws.com (prevents SSRF)
+        if parsed.scheme == "https" and re.fullmatch(
+            r"sns\.[a-z0-9-]+\.amazonaws\.com", parsed.hostname or ""
+        ):
             try:
                 await asyncio.to_thread(urllib.request.urlopen, subscribe_url, None, 5)
                 log.info("SNS subscription confirmed for topic: %s", body.get("TopicArn"))
             except Exception as exc:
                 log.warning("SNS subscription confirmation failed: %s", exc)
+        else:
+            log.warning("SNS SubscribeURL hostname rejected: %s", parsed.hostname)
         return JSONResponse(content={"status": "confirmed"})
 
     if msg_type != "Notification":
         return JSONResponse(content={"status": "ignored"})
+
+    # Verify signature before processing notifications
+    if not _verify_sns_signature(body):
+        log.warning("SNS Notification failed signature check — rejected")
+        raise HTTPException(status_code=400, detail="Invalid SNS signature.")
+
+    # Validate TopicArn if configured (prevents processing from unexpected topics)
+    if settings.ses_topic_arn and body.get("TopicArn") != settings.ses_topic_arn:
+        log.warning("SNS TopicArn mismatch: %s", body.get("TopicArn"))
+        raise HTTPException(status_code=400, detail="Unexpected SNS topic.")
 
     try:
         notification = json.loads(body.get("Message", "{}"))

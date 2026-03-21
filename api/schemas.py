@@ -16,7 +16,8 @@ class MessageOut(BaseModel):
 
 class SubscribeIn(BaseModel):
     email: EmailStr
-    source: str = Field(default="coming_soon", max_length=100)
+    # Lowercase alphanumeric + underscores only; prevents arbitrary string storage
+    source: str = Field(default="coming_soon", max_length=100, pattern=r"^[a-z0-9_]+$")
     cf_turnstile_token: str | None = Field(default=None, max_length=2048)
 
 

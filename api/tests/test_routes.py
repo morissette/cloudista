@@ -214,10 +214,11 @@ class TestUnsubscribe:
 class TestSesWebhook:
     def test_subscription_confirmation(self, client):
         c, _ = client
-        with patch("urllib.request.urlopen"):
+        with patch("main._verify_sns_signature", return_value=True), \
+             patch("urllib.request.urlopen"):
             resp = c.post("/api/ses-webhook", json={
                 "Type": "SubscriptionConfirmation",
-                "SubscribeURL": "https://sns.amazonaws.com/confirm?token=abc",
+                "SubscribeURL": "https://sns.us-east-1.amazonaws.com/confirm?token=abc",
                 "TopicArn": "arn:aws:sns:us-east-1:123:cloudista-ses",
             })
         assert resp.status_code == 200
@@ -236,10 +237,11 @@ class TestSesWebhook:
                 "bouncedRecipients": [{"emailAddress": "bounce@example.com"}],
             },
         })
-        resp = c.post("/api/ses-webhook", json={
-            "Type": "Notification",
-            "Message": message,
-        })
+        with patch("main._verify_sns_signature", return_value=True):
+            resp = c.post("/api/ses-webhook", json={
+                "Type": "Notification",
+                "Message": message,
+            })
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
 
@@ -255,10 +257,11 @@ class TestSesWebhook:
                 "complainedRecipients": [{"emailAddress": "spam@example.com"}],
             },
         })
-        resp = c.post("/api/ses-webhook", json={
-            "Type": "Notification",
-            "Message": message,
-        })
+        with patch("main._verify_sns_signature", return_value=True):
+            resp = c.post("/api/ses-webhook", json={
+                "Type": "Notification",
+                "Message": message,
+            })
         assert resp.status_code == 200
 
     def test_transient_bounce_ignored(self, client):
@@ -272,13 +275,23 @@ class TestSesWebhook:
                 "bouncedRecipients": [{"emailAddress": "temp@example.com"}],
             },
         })
-        resp = c.post("/api/ses-webhook", json={
-            "Type": "Notification",
-            "Message": message,
-        })
+        with patch("main._verify_sns_signature", return_value=True):
+            resp = c.post("/api/ses-webhook", json={
+                "Type": "Notification",
+                "Message": message,
+            })
         assert resp.status_code == 200
         # No DB call for transient bounces
         conn.execute.assert_not_called()
+
+    def test_invalid_signature_returns_400(self, client):
+        c, _ = client
+        with patch("main._verify_sns_signature", return_value=False):
+            resp = c.post("/api/ses-webhook", json={
+                "Type": "Notification",
+                "Message": "{}",
+            })
+        assert resp.status_code == 400
 
     def test_invalid_json_returns_400(self, client):
         c, _ = client
@@ -315,6 +328,63 @@ class TestRequestId:
 
 
 # ---------------------------------------------------------------------------
+# Search
+# ---------------------------------------------------------------------------
+
+class TestSearch:
+    def test_search_returns_results(self, client):
+        c, conn = client
+        conn.fetchval = AsyncMock(return_value=1)
+        conn.fetch = AsyncMock(return_value=[_post_row()])
+
+        resp = c.get("/api/search?q=kubernetes")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "posts" in data
+        assert data["total"] == 1
+
+    def test_search_query_too_short_returns_422(self, client):
+        c, _ = client
+        resp = c.get("/api/search?q=a")
+        assert resp.status_code == 422
+
+    def test_search_query_too_long_returns_422(self, client):
+        c, _ = client
+        resp = c.get("/api/search?q=" + "x" * 201)
+        assert resp.status_code == 422
+
+    def test_search_empty_results(self, client):
+        c, conn = client
+        conn.fetchval = AsyncMock(return_value=0)
+        conn.fetch = AsyncMock(return_value=[])
+
+        resp = c.get("/api/search?q=nomatch")
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
+        assert resp.json()["posts"] == []
+
+    def test_search_pagination(self, client):
+        c, conn = client
+        conn.fetchval = AsyncMock(return_value=50)
+        conn.fetch = AsyncMock(return_value=[_post_row()])
+
+        resp = c.get("/api/search?q=devops&page=2&per_page=10")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["page"] == 2
+        assert data["per_page"] == 10
+
+    def test_search_db_error_returns_500(self, client):
+        import sys
+        asyncpg_mod = sys.modules["asyncpg"]
+        c, conn = client
+        conn.fetchval = AsyncMock(side_effect=asyncpg_mod.PostgresError())
+
+        resp = c.get("/api/search?q=trigger-error")
+        assert resp.status_code == 500
+
+
+# ---------------------------------------------------------------------------
 # Rate limiting
 # ---------------------------------------------------------------------------
 
@@ -331,10 +401,23 @@ class TestRateLimiting:
             for i in range(6):
                 resp = c.post(
                     "/api/subscribe",
-                    json={"email": f"user{i}@example.com"},
-                    headers={"CF-Connecting-IP": "1.2.3.4"},
+                    json={"email": f"rateuser{i}@example.com"},
+                    headers={"X-Real-IP": "10.0.0.1"},
                 )
                 responses.append(resp.status_code)
+
+        assert 429 in responses
+
+    def test_search_rate_limit_enforced(self, client):
+        """31st request in the same minute should be rate-limited."""
+        c, conn = client
+        conn.fetchval = AsyncMock(return_value=0)
+        conn.fetch = AsyncMock(return_value=[])
+
+        responses = []
+        for _ in range(31):
+            resp = c.get("/api/search?q=test", headers={"X-Real-IP": "10.0.0.2"})
+            responses.append(resp.status_code)
 
         assert 429 in responses
 
@@ -350,6 +433,23 @@ def _row(**kwargs):
         "status": "pending",
         "token": "abc123def456",
         "token_expires_at": None,
+    }
+    defaults.update(kwargs)
+    return defaults
+
+
+def _post_row(**kwargs):
+    """Build a mock post row for blog route tests."""
+    from datetime import datetime, timezone
+    defaults = {
+        "id": 1,
+        "uuid": "00000000-0000-0000-0000-000000000001",
+        "title": "Test Post",
+        "slug": "test-post",
+        "excerpt": "A test excerpt",
+        "image_url": "https://images.unsplash.com/photo-test",
+        "author": "Marie H.",
+        "published_at": datetime(2026, 3, 20, tzinfo=timezone.utc),
     }
     defaults.update(kwargs)
     return defaults

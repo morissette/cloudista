@@ -26,8 +26,19 @@ MODE="${1:-}"
 step() { echo ""; echo "==> $*"; }
 ok()   { echo "    ✓ $*"; }
 
-ssh_cmd() { ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_HOST" "$@"; }
-scp_file() { scp -i "$SSH_KEY" -o StrictHostKeyChecking=no "$@"; }
+# Trust the server's host key — added on first run, refused if it changes (prevents MITM)
+_trust_host() {
+  local known="$HOME/.ssh/known_hosts"
+  local host="${SSH_HOST#*@}"  # strip user@ prefix
+  mkdir -p "$HOME/.ssh"
+  if ! ssh-keygen -F "$host" -f "$known" &>/dev/null; then
+    ssh-keyscan -H "$host" >> "$known" 2>/dev/null && echo "    ✓ Host key added: $host"
+  fi
+}
+_trust_host
+
+ssh_cmd() { ssh -i "$SSH_KEY" "$SSH_HOST" "$@"; }
+scp_file() { scp -i "$SSH_KEY" "$@"; }
 
 # ---------------------------------------------------------------------------
 # 1. Deploy static site files
@@ -82,6 +93,7 @@ if [[ "$MODE" != "--site" ]]; then
 BLOG_DB_HOST=localhost
 BLOG_DB_PORT=5433
 BLOG_DB_USER=cloudista
+# REQUIRED: set BLOG_DB_PASSWORD before starting the container or startup will fail
 BLOG_DB_PASSWORD=
 BLOG_DB_NAME=cloudista
 AWS_REGION=us-east-1
@@ -89,10 +101,16 @@ FROM_EMAIL=noreply@cloudista.org
 CONFIRM_BASE_URL=https://cloudista.org/api/confirm
 SITE_URL=https://cloudista.org
 TURNSTILE_SECRET=
+SES_TOPIC_ARN=
 EOF
     chmod 600 "$ENV_FILE"
-    echo "    ✓ .env created"
+    echo "    ✓ .env scaffold created — set BLOG_DB_PASSWORD before starting"
+    echo "    ! WARNING: container will fail to start until BLOG_DB_PASSWORD is set"
   else
+    # Verify the password is set in the existing file before deploying
+    if grep -q "^BLOG_DB_PASSWORD=$" "$ENV_FILE"; then
+      echo "    ! WARNING: BLOG_DB_PASSWORD is empty in $ENV_FILE — container will fail at startup"
+    fi
     echo "    ✓ .env already exists — preserving"
   fi
 REMOTE

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     confirm_base_url: str = "https://cloudista.org/api/confirm"
     site_url: str = "https://cloudista.org"
     turnstile_secret: str = ""
+    ses_topic_arn: str = ""  # optional: SNS TopicArn allowlist for /api/ses-webhook
 
     @field_validator("blog_db_password")
     @classmethod
