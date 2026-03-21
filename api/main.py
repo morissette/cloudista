@@ -27,7 +27,7 @@ from dependencies import close_pool, get_pg_conn, init_pool
 from email_template import build_verification_email
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from psycopg2.extensions import connection as PgConn
 from schemas import HealthOut, MessageOut, SubscribeIn
 
@@ -155,17 +155,28 @@ def _try_send_verification(email: str, token: str) -> None:
 # ---------------------------------------------------------------------------
 
 @app.get("/api/health", response_model=HealthOut)
-def health(conn: PgConn = Depends(get_pg_conn)):
+def health():
     """Liveness probe. Always returns 200; DB connectivity reported in body."""
+    from dependencies import _pg_pool  # noqa: PLC0415 — intentional late import to avoid circular
+
     db_ok = True
     db_error = None
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
-    except Exception as exc:
-        log.warning("DB ping failed: %s", exc)
+    if _pg_pool is None:
         db_ok = False
-        db_error = str(exc)
+        db_error = "Pool not initialised"
+    else:
+        conn = None
+        try:
+            conn = _pg_pool.getconn()
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        except Exception as exc:
+            log.warning("DB ping failed: %s", exc)
+            db_ok = False
+            db_error = str(exc)
+        finally:
+            if conn is not None:
+                _pg_pool.putconn(conn)
     return HealthOut(
         status="ok",
         db="ok" if db_ok else "unavailable",
@@ -173,7 +184,7 @@ def health(conn: PgConn = Depends(get_pg_conn)):
     )
 
 
-@app.post("/api/subscribe", status_code=201, response_model=MessageOut)
+@app.post("/api/subscribe", response_model=MessageOut)
 def subscribe(body: SubscribeIn, request: Request, conn: PgConn = Depends(get_pg_conn)):
     """
     Register an email address for launch notifications.
@@ -187,10 +198,13 @@ def subscribe(body: SubscribeIn, request: Request, conn: PgConn = Depends(get_pg
     ua = request.headers.get("User-Agent", "")[:500]
     token = _make_token(body.email)
 
-    if body.cf_turnstile_token and settings.turnstile_secret:
-        result = _verify_turnstile(body.cf_turnstile_token, ip)
-        if result is TurnstileResult.INVALID:
-            raise HTTPException(status_code=400, detail="CAPTCHA verification failed.")
+    if body.cf_turnstile_token:
+        if not settings.turnstile_secret:
+            log.warning("Turnstile token received but TURNSTILE_SECRET not configured — skipping")
+        else:
+            result = _verify_turnstile(body.cf_turnstile_token, ip)
+            if result is TurnstileResult.INVALID:
+                raise HTTPException(status_code=400, detail="CAPTCHA verification failed.")
 
     try:
         with conn.cursor() as cur:
@@ -202,7 +216,7 @@ def subscribe(body: SubscribeIn, request: Request, conn: PgConn = Depends(get_pg
 
             if row:
                 if row["status"] == "confirmed":
-                    return MessageOut(message="Already confirmed.")
+                    return JSONResponse(status_code=200, content={"message": "Already confirmed."})
                 if row["status"] == "unsubscribed":
                     cur.execute(
                         "UPDATE subscribers SET status='pending', token=%s WHERE id=%s",
@@ -210,10 +224,16 @@ def subscribe(body: SubscribeIn, request: Request, conn: PgConn = Depends(get_pg
                     )
                     conn.commit()
                     _try_send_verification(body.email, token)
-                    return MessageOut(message="Re-subscribed — check your email.")
+                    return JSONResponse(
+                        status_code=200,
+                        content={"message": "Re-subscribed — check your email."},
+                    )
                 # pending — resend
                 _try_send_verification(body.email, row["token"])
-                return MessageOut(message="Confirmation email resent.")
+                return JSONResponse(
+                    status_code=200,
+                    content={"message": "Confirmation email resent."},
+                )
 
             cur.execute(
                 """INSERT INTO subscribers (email, source, token, ip_address, user_agent)
@@ -222,11 +242,19 @@ def subscribe(body: SubscribeIn, request: Request, conn: PgConn = Depends(get_pg
             )
             conn.commit()
         _try_send_verification(body.email, token)
-        return MessageOut(message="Check your email to confirm.")
+        return JSONResponse(
+            status_code=201,
+            content={"message": "Check your email to confirm."},
+        )
 
-    except psycopg2.errors.UniqueViolation:
+    except psycopg2.errors.UniqueViolation as exc:
         conn.rollback()
-        return MessageOut(message="Already subscribed.")
+        constraint = getattr(getattr(exc, "diag", None), "constraint_name", None)
+        if constraint and "token" in constraint:
+            # Token collision (astronomically rare) — treat as transient error
+            log.error("Token uniqueness violation for %s — retry", body.email)
+            raise HTTPException(status_code=500, detail="Subscription failed, please retry.")
+        return JSONResponse(status_code=200, content={"message": "Already subscribed."})
     except Exception as exc:
         conn.rollback()
         log.error("subscribe error: %s", exc)
@@ -247,16 +275,16 @@ def confirm(token: str, conn: PgConn = Depends(get_pg_conn)):
             )
             row = cur.fetchone()
             if not row:
-                return RedirectResponse(f"{settings.site_url}/?confirmed=invalid")
+                return RedirectResponse(url=f"{settings.site_url}/?confirmed=invalid", status_code=302)
             if row["status"] == "confirmed":
-                return RedirectResponse(f"{settings.site_url}/?confirmed=already")
+                return RedirectResponse(url=f"{settings.site_url}/?confirmed=already", status_code=302)
             cur.execute(
                 "UPDATE subscribers SET status='confirmed', confirmed_at=now() WHERE id=%s",
                 (row["id"],),
             )
             conn.commit()
-        return RedirectResponse(f"{settings.site_url}/?confirmed=true")
+        return RedirectResponse(url=f"{settings.site_url}/?confirmed=true", status_code=302)
     except Exception as exc:
         conn.rollback()
         log.error("confirm error: %s", exc)
-        return RedirectResponse(f"{settings.site_url}/?confirmed=error")
+        return RedirectResponse(url=f"{settings.site_url}/?confirmed=error", status_code=302)

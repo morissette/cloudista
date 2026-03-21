@@ -67,6 +67,7 @@ if [[ "$MODE" != "--site" ]]; then
 
   step "Uploading API source files..."
   scp_file api/main.py api/email_template.py api/blog_routes.py \
+    api/config.py api/dependencies.py api/schemas.py \
     api/Pipfile api/Pipfile.lock api/Dockerfile "$SSH_HOST:$REMOTE_API/"
   # Scripts dir (batch tools — sudo needed for /www/)
   ssh_cmd "sudo mkdir -p $REMOTE_WEB/scripts && sudo chown ec2-user:ec2-user $REMOTE_WEB/scripts"
@@ -81,7 +82,7 @@ if [[ "$MODE" != "--site" ]]; then
 BLOG_DB_HOST=localhost
 BLOG_DB_PORT=5433
 BLOG_DB_USER=cloudista
-BLOG_DB_PASSWORD=cloudista_dev
+BLOG_DB_PASSWORD=
 BLOG_DB_NAME=cloudista
 AWS_REGION=us-east-1
 FROM_EMAIL=noreply@cloudista.org

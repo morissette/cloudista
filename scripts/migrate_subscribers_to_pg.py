@@ -63,7 +63,7 @@ def main() -> None:
         )
     pg_conn.commit()
 
-    print(f"Migration complete — {len(rows)} rows inserted (duplicates skipped).")
+    print(f"Migration complete — {dst.rowcount} rows inserted ({len(rows) - dst.rowcount} duplicates skipped).")
     mysql_conn.close()
     pg_conn.close()
 
