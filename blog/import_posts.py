@@ -7,6 +7,7 @@ then Markdown body content. Converts Markdown → HTML using Python-Markdown
 with fenced_code, codehilite, tables, and extra extensions.
 """
 
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -18,7 +19,10 @@ import psycopg2
 # ── Config ────────────────────────────────────────────────────────────────────
 
 BLOG_DIR = Path(__file__).parent
-DB_DSN   = "postgresql://cloudista:cloudista_dev@localhost:5433/cloudista"
+_DEFAULT_DSN = "postgresql://cloudista:cloudista_dev@localhost:5433/cloudista"
+DB_DSN = os.environ.get("POPULATE_DB_DSN", _DEFAULT_DSN)
+if DB_DSN == _DEFAULT_DSN:
+    print("Warning: using default dev DSN — set POPULATE_DB_DSN for production", file=sys.stderr)
 
 MD_EXTENSIONS = [
     "fenced_code",
@@ -147,7 +151,7 @@ def import_posts(blog_dir: Path, dsn: str, dry_run: bool = False):
     author_map = {row[0]: row[1] for row in cur.fetchall()}
 
     inserted = 0
-    skipped  = 0
+    updated  = 0
     errors   = []
 
     for path in txt_files:
@@ -159,6 +163,9 @@ def import_posts(blog_dir: Path, dsn: str, dry_run: bool = False):
 
         author_id = author_map.get(post["author_name"])
         if author_id is None:
+            if dry_run:
+                print(f"  [dry] {path.name} → slug={post['slug']!r} (unknown author: {post['author_name']!r})")
+                continue
             # Insert unknown author on the fly
             cur.execute(
                 "INSERT INTO authors (name, email) VALUES (%s, %s) RETURNING id",
@@ -188,6 +195,7 @@ def import_posts(blog_dir: Path, dsn: str, dry_run: bool = False):
                     published_at = EXCLUDED.published_at,
                     status       = EXCLUDED.status,
                     updated_at   = NOW()
+                RETURNING (xmax = 0) AS is_insert
                 """,
                 (
                     post["title"],
@@ -202,23 +210,26 @@ def import_posts(blog_dir: Path, dsn: str, dry_run: bool = False):
                     post["published_at"],
                 ),
             )
-            inserted += 1
-            print(f"  ✓ {path.name}")
+            row = cur.fetchone()
+            conn.commit()
+            if row[0]:
+                inserted += 1
+                print(f"  + {path.name}")
+            else:
+                updated += 1
+                print(f"  ~ {path.name} (updated)")
         except Exception as e:
             conn.rollback()
             errors.append((path.name, str(e)))
             print(f"  ✗ {path.name}: {e}", file=sys.stderr)
             continue
 
-    if not dry_run:
-        conn.commit()
-
     cur.close()
     conn.close()
 
     print(f"\n{'─'*50}")
-    print(f"Imported : {inserted}")
-    print(f"Skipped  : {skipped}")
+    print(f"Inserted : {inserted}")
+    print(f"Updated  : {updated}")
     if errors:
         print(f"Errors   : {len(errors)}")
         for name, msg in errors:

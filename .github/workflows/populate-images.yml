@@ -40,31 +40,35 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Open SSH tunnel to blog DB
         run: |
           ssh -i ~/.ssh/deploy_key \
-              -o StrictHostKeyChecking=no \
               -L 5433:localhost:5433 \
               -N -f \
-              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+              "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
           echo "Tunnel established on localhost:5433"
 
       - name: Build args
         id: args
+        # Use env vars, not inline ${{ inputs.* }}, to prevent shell injection
+        env:
+          INPUT_SLUG: ${{ inputs.slug }}
+          INPUT_LIMIT: ${{ inputs.limit }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           ARGS=""
-          if [ -n "${{ inputs.slug }}" ]; then
-            ARGS="$ARGS --slug ${{ inputs.slug }}"
+          if [ -n "$INPUT_SLUG" ]; then
+            ARGS="$ARGS --slug $INPUT_SLUG"
           fi
-          if [ "${{ inputs.limit }}" != "0" ]; then
-            ARGS="$ARGS --limit ${{ inputs.limit }}"
+          if [ "$INPUT_LIMIT" != "0" ]; then
+            ARGS="$ARGS --limit $INPUT_LIMIT"
           fi
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
             ARGS="$ARGS --dry-run"
           fi
-          echo "flags=$ARGS" >> $GITHUB_OUTPUT
+          echo "flags=$ARGS" >> "$GITHUB_OUTPUT"
 
       - name: Populate images
         env:

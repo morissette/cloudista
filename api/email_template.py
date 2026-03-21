@@ -2,12 +2,15 @@
 HTML + plain-text templates for the Cloudista verification email.
 
 Usage:
-    subject, html, text = build_verification_email("https://cloudista.org/api/confirm/abc123")
+    subject, html, text = build_verification_email(
+        "https://cloudista.org/api/confirm/abc123",
+        "https://cloudista.org/api/unsubscribe/abc123",
+    )
 """
 from __future__ import annotations  # enables tuple[...] hints on Python 3.8
 
 
-def build_verification_email(confirm_url: str) -> tuple[str, str, str]:
+def build_verification_email(confirm_url: str, unsubscribe_url: str) -> tuple[str, str, str]:
     """Return (subject, html_body, text_body)."""
 
     subject = "Confirm your Cloudista subscription"
@@ -139,7 +142,7 @@ def build_verification_email(confirm_url: str) -> tuple[str, str, str]:
 
               <!-- Expiry note -->
               <p style="margin:22px 0 28px;font-size:13px;color:#94a3b8;line-height:1.6;">
-                This link is unique to you and will remain active until you confirm.
+                This link is unique to you and expires in <strong>72 hours</strong>.
               </p>
 
               <!-- Divider -->
@@ -172,7 +175,9 @@ def build_verification_email(confirm_url: str) -> tuple[str, str, str]:
                 You received this email because someone signed up at
                 <a href="https://cloudista.org"
                    style="color:#64748b;text-decoration:none;">cloudista.org</a>.
-                If that wasn't you, you can safely ignore this email.
+                If that wasn't you, you can safely ignore this email or
+                <a href="{unsubscribe_url}"
+                   style="color:#64748b;text-decoration:none;">unsubscribe</a>.
               </p>
               <p style="margin:0;font-size:12px;color:#cbd5e1;">
                 &copy; 2026 Cloudista &nbsp;&middot;&nbsp; All rights reserved
@@ -206,11 +211,13 @@ ecosystem. We'll notify you the moment we go live.
 Confirm your email by visiting this link:
 {confirm_url}
 
-This link is unique to you and will remain active until you confirm.
+This link expires in 72 hours.
 
 ---
 You received this because someone signed up at cloudista.org.
 If that wasn't you, feel free to ignore this email.
+
+To unsubscribe: {unsubscribe_url}
 
 © 2026 Cloudista
 """

@@ -2,18 +2,22 @@
 
 ## Project overview
 
-Cloudista is a personal technical blog at cloudista.org. It is a static-ish site served by nginx, with a FastAPI backend that handles blog content (PostgreSQL) and subscriber management (MySQL/MariaDB).
+Cloudista is a personal technical blog at cloudista.org. It is a static-ish site served by nginx, with a FastAPI backend that handles blog content and subscriber management, both on a single PostgreSQL instance.
 
 ## Repo layout
 
 ```
 cloudista/
 ├── api/                  # FastAPI app (deployed as Docker container)
-│   ├── main.py           # Subscriber routes + app bootstrap
+│   ├── main.py           # Subscriber + webhook routes + app bootstrap
 │   ├── blog_routes.py    # Blog API routes (/api/blog/*)
+│   ├── config.py         # Pydantic BaseSettings (all env vars)
+│   ├── dependencies.py   # asyncpg pool + get_pg_conn dependency
+│   ├── schemas.py        # All Pydantic request/response models
 │   ├── email_template.py # SES email builder
 │   ├── Pipfile           # Python deps (use pipenv)
-│   └── Dockerfile
+│   ├── Dockerfile
+│   └── tests/            # Unit + integration tests (pytest)
 ├── blog/                 # Blog content + import tools
 │   ├── *.txt             # Post source files (YYYY-MM-slug.txt)
 │   ├── import_posts.py   # Import .txt → PostgreSQL
@@ -33,7 +37,7 @@ cloudista/
 │   └── robots.txt
 ├── infra/                # Infrastructure config
 │   ├── nginx-cloudista.conf
-│   └── schema.sql        # Subscriber DB (MySQL) schema
+│   └── schema.sql        # PostgreSQL schema (subscribers + indexes)
 ├── images/               # Post images (served at /images/)
 ├── scripts/              # Operational one-off tools
 ├── .github/workflows/    # CI/CD
@@ -61,41 +65,69 @@ make dev              # local DB + API with hot-reload
 
 ## Architecture
 
-### Two databases
+### Single PostgreSQL database
 
-| DB         | Engine     | Purpose               | Host port | Used by            |
-|------------|------------|-----------------------|-----------|--------------------|
-| blog DB    | PostgreSQL | Posts, tags, authors  | 5433      | `blog_routes.py`   |
-| subscriber | MySQL/MariaDB | Email subscriptions | 3306     | `main.py`          |
+All data — blog posts, tags, authors, and subscribers — lives in one PostgreSQL instance.
 
-The blog DB is the primary one. The subscriber DB (MySQL) is occasionally unavailable and non-critical.
+| Schema area  | Engine     | Purpose                        | Used by            |
+|--------------|------------|--------------------------------|--------------------|
+| blog tables  | PostgreSQL | Posts, tags, authors, images   | `blog_routes.py`   |
+| subscribers  | PostgreSQL | Email subscriptions + tokens   | `main.py`          |
 
 ### API routes
 
-- `/api/blog/*` — blog content, served from `blog_routes.py` (PostgreSQL)
-- `/api/subscribe` `/api/confirm/{token}` — subscriber flow in `main.py` (MySQL)
+- `/api/blog/*` — blog content, served from `blog_routes.py`
+- `/api/subscribe` — register email; sends verification via SES (rate limited: 5/min/IP)
+- `/api/confirm/{token}` — confirm subscription (token expires in 72 hours)
+- `/api/unsubscribe/{token}` — self-service unsubscribe (link in every email)
+- `/api/ses-webhook` — SNS bounce/complaint handler; marks bad addresses unsubscribed
 - `/api/health` — always returns 200; DB status in response body
 
 ### New API endpoints
 
 - Blog/content → add to `blog_routes.py`
-- Platform/auth/infra → add to `main.py`
-- Use `psycopg2` for the blog DB, `pymysql` for the subscriber DB
+- Platform/auth/subscriber infra → add to `main.py`
+- All routes must be `async def`; use `asyncpg` via `get_pg_conn` dependency
+- SQL parameters use `$1, $2, ...` (asyncpg positional placeholders, not `%s`)
+
+## Testing
+
+**Every new feature or bug fix must include unit tests.** Tests live in `api/tests/`.
+
+```bash
+# Run all tests
+cd api && pytest tests/ -v
+
+# Run a specific test file
+cd api && pytest tests/test_routes.py -v
+```
+
+### Test structure
+
+| File | What it covers |
+|------|---------------|
+| `tests/test_email_template.py` | Email rendering, URLs, content |
+| `tests/test_schemas.py` | Pydantic validation pass/fail/edge |
+| `tests/test_routes.py` | All route endpoints with mocked DB |
+| `tests/conftest.py` | Stubs for asyncpg/boto3 (no real packages needed locally) |
+
+### Test requirements
+
+- **Pass tests**: happy path for every route/function
+- **Fail tests**: invalid input, missing fields, DB errors
+- **Edge tests**: expiry boundaries, duplicate emails, rate limit threshold
+- DB must be mocked (no live DB in tests); use `app.dependency_overrides[get_pg_conn]`
+- The `test` GitHub Actions job must pass before any PR can merge to `main`
 
 ## Environment variables (production `.env` on server)
 
 ```
-# Blog DB (PostgreSQL)
+# PostgreSQL (blog + subscribers)
 BLOG_DB_HOST=localhost
 BLOG_DB_PORT=5433
 BLOG_DB_USER=cloudista
 BLOG_DB_PASSWORD=...
-
-# Subscriber DB (MySQL)
-DB_HOST=127.0.0.1
-DB_USER=cloudista_api
-DB_PASSWORD=...
-DB_NAME=cloudista
+BLOG_DB_NAME=cloudista
 
 # AWS SES
 AWS_REGION=us-east-1
@@ -144,10 +176,12 @@ Image fallback chain: Unsplash → keyword alt query → "devops {keywords}" →
 
 GitHub Actions at `.github/workflows/`:
 
+- **`lint.yml`** — ruff, yamllint, shellcheck, eslint via reviewdog; must pass before merge
+- **`test.yml`** — pytest on every PR and push to main; must pass before merge
 - **`deploy.yml`** — triggered on push to `main` or manually. Auto-detects `--api` vs `--site` from changed paths.
 - **`populate-images.yml`** — manual workflow to fetch/update post images against the production DB via SSH tunnel.
 
-GitHub secrets required: `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`, `UNSPLASH_ACCESS_KEY`, `PEXELS_ACCESS_KEY`, `BLOG_DB_PASSWORD`.
+GitHub secrets required: `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`, `UNSPLASH_ACCESS_KEY`, `PEXELS_ACCESS_KEY`, `BLOG_DB_PASSWORD`, `TURNSTILE_SECRET`, `GOOGLE_API_KEY`.
 
 ## Local dev
 

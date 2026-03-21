@@ -8,12 +8,16 @@ Usage:
     python3 tag_posts.py --all        # re-tag every published post (clears first)
     python3 tag_posts.py --dry-run    # show matches without writing to DB
 """
+import os
 import sys
 
 import psycopg2
 import psycopg2.extras
 
-DB_DSN = "postgresql://cloudista:cloudista_dev@localhost:5433/cloudista"
+_DEFAULT_DSN = "postgresql://cloudista:cloudista_dev@localhost:5433/cloudista"
+DB_DSN = os.environ.get("POPULATE_DB_DSN", _DEFAULT_DSN)
+if DB_DSN == _DEFAULT_DSN:
+    print("Warning: using default dev DSN — set POPULATE_DB_DSN for production", file=sys.stderr)
 
 # ── Categories ────────────────────────────────────────────────────────────────
 # (display name, slug, description)
@@ -116,9 +120,9 @@ RULES = {
     "cilium":            {"cats": ["kubernetes", "service-mesh"],    "tags": ["kubernetes", "service-mesh"]},
     "istio":             {"cats": ["kubernetes", "service-mesh"],    "tags": ["kubernetes", "service-mesh"]},
     "chaos":             {"cats": ["kubernetes", "platform-engineering"], "tags": ["kubernetes"]},
-    "writing-kubernetes":{"cats": ["kubernetes"],                    "tags": ["kubernetes", "golang"]},
+    "writing-kubernetes": {"cats": ["kubernetes"],                   "tags": ["kubernetes", "golang"]},
     "kubernetes-controllers": {"cats": ["kubernetes"],               "tags": ["kubernetes", "golang"]},
-    "admission-webhooks":{"cats": ["kubernetes"],                    "tags": ["kubernetes", "golang"]},
+    "admission-webhooks": {"cats": ["kubernetes"],                   "tags": ["kubernetes", "golang"]},
     "ebpf":              {"cats": ["kubernetes", "service-mesh"],    "tags": ["kubernetes", "service-mesh"]},
     # Go / Golang
     "golang":            {"cats": ["golang"],                        "tags": ["golang"]},
@@ -130,7 +134,7 @@ RULES = {
     "grpc-in-go":        {"cats": ["golang"],                        "tags": ["golang", "service-mesh"]},
     "grpc-mtls": {"cats": ["golang", "security", "service-mesh"], "tags": ["golang", "security", "service-mesh"]},
     "fips":              {"cats": ["golang", "security"],            "tags": ["golang", "security"]},
-    "envelope-encryption":{"cats": ["security", "golang"],          "tags": ["security", "golang"]},
+    "envelope-encryption": {"cats": ["security", "golang"],         "tags": ["security", "golang"]},
     "key-rotation":      {"cats": ["security", "golang"],           "tags": ["security", "golang"]},
     "opentelemetry":     {"cats": ["monitoring", "golang"],         "tags": ["monitoring", "golang"]},
     # Security
@@ -150,7 +154,7 @@ RULES = {
     "selenium":          {"cats": ["python"],                        "tags": ["python"]},
     "sqlalchemy":        {"cats": ["databases", "python"],           "tags": ["database", "python"]},
     "chatastic":         {"cats": ["chatops", "python"],             "tags": ["chatops", "python"]},
-    "structured-logging":{"cats": ["monitoring", "python"],         "tags": ["monitoring", "python"]},
+    "structured-logging": {"cats": ["monitoring", "python"],        "tags": ["monitoring", "python"]},
     # Terraform / IaC
     "terraform":         {"cats": ["terraform"],                     "tags": ["terraform"]},
     "pulumi":            {"cats": ["terraform", "aws"],              "tags": ["terraform", "aws"]},
@@ -218,6 +222,7 @@ RULES = {
     "nodejs":            {"cats": ["web"],                           "tags": ["javascript"]},
 }
 
+
 def get_matches(slug, title):
     """Return (matched_cat_slugs, matched_tag_slugs) for a post."""
     text = (slug + " " + title).lower()
@@ -229,58 +234,63 @@ def get_matches(slug, title):
     return cats, tags
 
 
-def run(retag_all: bool = False, dry_run: bool = False):
-    conn = psycopg2.connect(DB_DSN, cursor_factory=psycopg2.extras.RealDictCursor)
-    cur  = conn.cursor()
-
-    if not dry_run:
-        # Seed categories
+def seed_taxonomy(conn) -> None:
+    """Insert/update all categories and tags."""
+    with conn.cursor() as cur:
         for name, slug, desc in CATEGORIES:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO categories (name, slug, description)
                 VALUES (%s, %s, %s)
                 ON CONFLICT (slug) DO UPDATE SET name=EXCLUDED.name, description=EXCLUDED.description
-            """, (name, slug, desc))
+                """,
+                (name, slug, desc),
+            )
 
-        # Seed tags
         for name, slug in TAGS:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO tags (name, slug)
                 VALUES (%s, %s)
                 ON CONFLICT (slug) DO UPDATE SET name=EXCLUDED.name
-            """, (name, slug))
+                """,
+                (name, slug),
+            )
+    conn.commit()
+    print(f"Seeded {len(CATEGORIES)} categories, {len(TAGS)} tags")
 
-        conn.commit()
-        print(f"Seeded {len(CATEGORIES)} categories, {len(TAGS)} tags")
 
+def apply_tags(conn, retag_all: bool = False, dry_run: bool = False) -> None:
+    """Match and apply tags/categories to published posts."""
+    with conn.cursor() as cur:
         # Build slug → id maps
         cur.execute("SELECT slug, id FROM categories")
         cat_map = {row["slug"]: row["id"] for row in cur.fetchall()}
 
         cur.execute("SELECT slug, id FROM tags")
         tag_map = {row["slug"]: row["id"] for row in cur.fetchall()}
-    else:
-        cat_map, tag_map = {}, {}
 
-    # Fetch posts to process
-    if retag_all:
-        cur.execute("SELECT id, slug, title FROM posts WHERE status='published'")
-    else:
-        cur.execute("""
-            SELECT p.id, p.slug, p.title FROM posts p
-            WHERE  p.status = 'published'
-              AND  NOT EXISTS (SELECT 1 FROM post_tags       WHERE post_id = p.id)
-              AND  NOT EXISTS (SELECT 1 FROM post_categories WHERE post_id = p.id)
-        """)
+        # Fetch posts to process
+        if retag_all:
+            cur.execute("SELECT id, slug, title FROM posts WHERE status='published'")
+        else:
+            cur.execute(
+                """
+                SELECT p.id, p.slug, p.title FROM posts p
+                WHERE  p.status = 'published'
+                  AND  NOT EXISTS (SELECT 1 FROM post_tags       WHERE post_id = p.id)
+                  AND  NOT EXISTS (SELECT 1 FROM post_categories WHERE post_id = p.id)
+                """
+            )
+        posts = cur.fetchall()
 
-    posts = cur.fetchall()
     print(f"Processing {len(posts)} post(s)  [retag_all={retag_all}, dry_run={dry_run}]")
 
     tagged = 0
     for post in posts:
         post_id = post["id"]
-        slug    = post["slug"]
-        title   = post["title"]
+        slug = post["slug"]
+        title = post["title"]
 
         matched_cats, matched_tags = get_matches(slug, title)
         if not matched_cats and not matched_tags:
@@ -296,43 +306,49 @@ def run(retag_all: bool = False, dry_run: bool = False):
             continue
 
         try:
-            if retag_all:
-                cur.execute("DELETE FROM post_categories WHERE post_id = %s", (post_id,))
-                cur.execute("DELETE FROM post_tags       WHERE post_id = %s", (post_id,))
+            with conn.cursor() as cur:
+                if retag_all:
+                    cur.execute("DELETE FROM post_categories WHERE post_id = %s", (post_id,))
+                    cur.execute("DELETE FROM post_tags       WHERE post_id = %s", (post_id,))
 
-            for cs in matched_cats:
-                cat_id = cat_map.get(cs)
-                if cat_id:
-                    cur.execute(
-                        "INSERT INTO post_categories (post_id, category_id) VALUES (%s, %s)"
-                        " ON CONFLICT DO NOTHING",
-                        (post_id, cat_id),
-                    )
+                for cs in matched_cats:
+                    cat_id = cat_map.get(cs)
+                    if cat_id:
+                        cur.execute(
+                            "INSERT INTO post_categories (post_id, category_id) VALUES (%s, %s)"
+                            " ON CONFLICT DO NOTHING",
+                            (post_id, cat_id),
+                        )
 
-            for ts in matched_tags:
-                tag_id = tag_map.get(ts)
-                if tag_id:
-                    cur.execute(
-                        "INSERT INTO post_tags (post_id, tag_id) VALUES (%s, %s)"
-                        " ON CONFLICT DO NOTHING",
-                        (post_id, tag_id),
-                    )
-
+                for ts in matched_tags:
+                    tag_id = tag_map.get(ts)
+                    if tag_id:
+                        cur.execute(
+                            "INSERT INTO post_tags (post_id, tag_id) VALUES (%s, %s)"
+                            " ON CONFLICT DO NOTHING",
+                            (post_id, tag_id),
+                        )
+            conn.commit()
             tagged += 1
         except Exception as exc:
             conn.rollback()
             print(f"  ✗ {slug}: {exc}", file=sys.stderr)
             continue
 
-    if not dry_run:
-        conn.commit()
-
-    cur.close()
-    conn.close()
     print(f"\nTagged {tagged} post(s).")
 
 
+def main(retag_all: bool = False, dry_run: bool = False) -> None:
+    conn = psycopg2.connect(DB_DSN, cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        if not dry_run:
+            seed_taxonomy(conn)
+        apply_tags(conn, retag_all=retag_all, dry_run=dry_run)
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
-    retag_all = "--all"     in sys.argv
-    dry_run   = "--dry-run" in sys.argv
-    run(retag_all=retag_all, dry_run=dry_run)
+    retag_all = "--all" in sys.argv
+    dry_run = "--dry-run" in sys.argv
+    main(retag_all=retag_all, dry_run=dry_run)

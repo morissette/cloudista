@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir pipenv
 COPY Pipfile Pipfile.lock ./
 RUN pipenv install --system --skip-lock
 
-COPY main.py email_template.py blog_routes.py ./
+COPY main.py email_template.py blog_routes.py config.py dependencies.py schemas.py ./
 
 EXPOSE 8000
 

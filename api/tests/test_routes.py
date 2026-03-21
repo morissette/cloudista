@@ -1,0 +1,468 @@
+"""
+Integration-style tests for API routes using FastAPI's TestClient.
+The database dependency is mocked so no real PostgreSQL connection is needed.
+"""
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+# ---------------------------------------------------------------------------
+# App bootstrap — patch pool init so no real DB is needed at import time
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def client():
+    """TestClient with DB pool dependency overridden to return a mock connection."""
+    with patch("dependencies.init_pool", new_callable=AsyncMock), \
+         patch("dependencies.close_pool", new_callable=AsyncMock):
+        from dependencies import get_pg_conn
+        from main import app
+
+        mock_conn = AsyncMock()
+
+        async def override_get_pg_conn():
+            yield mock_conn
+
+        app.dependency_overrides[get_pg_conn] = override_get_pg_conn
+        with TestClient(app, raise_server_exceptions=False) as c:
+            yield c, mock_conn
+        app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
+
+class TestHealth:
+    def test_always_200(self, client):
+        c, _ = client
+        with patch("dependencies._pg_pool", None):
+            resp = c.get("/api/health")
+        assert resp.status_code == 200
+
+    def test_db_unavailable_when_pool_none(self, client):
+        c, _ = client
+        with patch("dependencies._pg_pool", None):
+            resp = c.get("/api/health")
+        data = resp.json()
+        assert data["db"] == "unavailable"
+        assert data["status"] == "ok"
+
+    def test_response_has_required_fields(self, client):
+        c, _ = client
+        with patch("dependencies._pg_pool", None):
+            resp = c.get("/api/health")
+        data = resp.json()
+        assert "status" in data
+        assert "db" in data
+
+
+# ---------------------------------------------------------------------------
+# Subscribe — pass paths
+# ---------------------------------------------------------------------------
+
+class TestSubscribePass:
+    def test_new_subscriber_returns_201(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=None)
+        conn.execute = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        with patch("main._try_send_verification", new_callable=AsyncMock):
+            resp = c.post("/api/subscribe", json={"email": "new@example.com"})
+        assert resp.status_code == 201
+        assert "Check your email" in resp.json()["message"]
+
+    def test_already_confirmed_returns_200(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=_row(status="confirmed"))
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        resp = c.post("/api/subscribe", json={"email": "confirmed@example.com"})
+        assert resp.status_code == 200
+        assert "confirmed" in resp.json()["message"].lower()
+
+    def test_pending_resend_returns_200(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=_row(status="pending", token="tok"))
+        conn.execute = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        with patch("main._try_send_verification", new_callable=AsyncMock):
+            resp = c.post("/api/subscribe", json={"email": "pending@example.com"})
+        assert resp.status_code == 200
+        assert "resent" in resp.json()["message"].lower()
+
+    def test_unsubscribed_resubscribe_returns_200(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=_row(status="unsubscribed", token="tok"))
+        conn.execute = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        with patch("main._try_send_verification", new_callable=AsyncMock):
+            resp = c.post("/api/subscribe", json={"email": "unsub@example.com"})
+        assert resp.status_code == 200
+        assert "re-subscribed" in resp.json()["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Subscribe — fail paths
+# ---------------------------------------------------------------------------
+
+class TestSubscribeFail:
+    def test_missing_email_returns_422(self, client):
+        c, _ = client
+        resp = c.post("/api/subscribe", json={})
+        assert resp.status_code == 422
+
+    def test_invalid_email_returns_422(self, client):
+        c, _ = client
+        resp = c.post("/api/subscribe", json={"email": "not-an-email"})
+        assert resp.status_code == 422
+
+    def test_source_too_long_returns_422(self, client):
+        c, _ = client
+        resp = c.post("/api/subscribe", json={"email": "a@b.com", "source": "x" * 101})
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Confirm
+# ---------------------------------------------------------------------------
+
+class TestConfirm:
+    def test_valid_token_redirects_confirmed_true(self, client):
+        c, conn = client
+        from datetime import datetime, timedelta, timezone
+        conn.fetchrow = AsyncMock(return_value=_row(
+            status="pending",
+            token_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        ))
+        conn.execute = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        resp = c.get("/api/confirm/validtoken", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "confirmed=true" in resp.headers["location"]
+
+    def test_unknown_token_redirects_invalid(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=None)
+
+        resp = c.get("/api/confirm/unknowntoken", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "confirmed=invalid" in resp.headers["location"]
+
+    def test_already_confirmed_redirects_already(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=_row(status="confirmed"))
+
+        resp = c.get("/api/confirm/confirmedtoken", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "confirmed=already" in resp.headers["location"]
+
+    def test_expired_token_redirects_expired(self, client):
+        c, conn = client
+        from datetime import datetime, timedelta, timezone
+        conn.fetchrow = AsyncMock(return_value=_row(
+            status="pending",
+            token_expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        ))
+
+        resp = c.get("/api/confirm/expiredtoken", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "confirmed=expired" in resp.headers["location"]
+
+
+# ---------------------------------------------------------------------------
+# Unsubscribe
+# ---------------------------------------------------------------------------
+
+class TestUnsubscribe:
+    def test_valid_token_redirects_true(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=_row(status="confirmed"))
+        conn.execute = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        resp = c.get("/api/unsubscribe/validtoken", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "unsubscribed=true" in resp.headers["location"]
+
+    def test_unknown_token_redirects_invalid(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=None)
+
+        resp = c.get("/api/unsubscribe/badtoken", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "unsubscribed=invalid" in resp.headers["location"]
+
+    def test_already_unsubscribed_redirects_already(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=_row(status="unsubscribed"))
+
+        resp = c.get("/api/unsubscribe/token", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "unsubscribed=already" in resp.headers["location"]
+
+
+# ---------------------------------------------------------------------------
+# SES webhook
+# ---------------------------------------------------------------------------
+
+class TestSesWebhook:
+    def test_subscription_confirmation(self, client):
+        c, _ = client
+        with patch("main._verify_sns_signature", return_value=True), \
+             patch("urllib.request.urlopen"):
+            resp = c.post("/api/ses-webhook", json={
+                "Type": "SubscriptionConfirmation",
+                "SubscribeURL": "https://sns.us-east-1.amazonaws.com/confirm?token=abc",
+                "TopicArn": "arn:aws:sns:us-east-1:123:cloudista-ses",
+            })
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "confirmed"
+
+    def test_permanent_bounce_marks_unsubscribed(self, client):
+        import json
+        c, conn = client
+        conn.execute = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        message = json.dumps({
+            "notificationType": "Bounce",
+            "bounce": {
+                "bounceType": "Permanent",
+                "bouncedRecipients": [{"emailAddress": "bounce@example.com"}],
+            },
+        })
+        with patch("main._verify_sns_signature", return_value=True):
+            resp = c.post("/api/ses-webhook", json={
+                "Type": "Notification",
+                "Message": message,
+            })
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+    def test_complaint_marks_unsubscribed(self, client):
+        import json
+        c, conn = client
+        conn.execute = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        message = json.dumps({
+            "notificationType": "Complaint",
+            "complaint": {
+                "complainedRecipients": [{"emailAddress": "spam@example.com"}],
+            },
+        })
+        with patch("main._verify_sns_signature", return_value=True):
+            resp = c.post("/api/ses-webhook", json={
+                "Type": "Notification",
+                "Message": message,
+            })
+        assert resp.status_code == 200
+
+    def test_transient_bounce_ignored(self, client):
+        import json
+        c, conn = client
+        conn.execute.reset_mock()  # clear calls from earlier tests in this fixture scope
+        message = json.dumps({
+            "notificationType": "Bounce",
+            "bounce": {
+                "bounceType": "Transient",
+                "bouncedRecipients": [{"emailAddress": "temp@example.com"}],
+            },
+        })
+        with patch("main._verify_sns_signature", return_value=True):
+            resp = c.post("/api/ses-webhook", json={
+                "Type": "Notification",
+                "Message": message,
+            })
+        assert resp.status_code == 200
+        # No DB call for transient bounces
+        conn.execute.assert_not_called()
+
+    def test_invalid_signature_returns_400(self, client):
+        c, _ = client
+        with patch("main._verify_sns_signature", return_value=False):
+            resp = c.post("/api/ses-webhook", json={
+                "Type": "Notification",
+                "Message": "{}",
+            })
+        assert resp.status_code == 400
+
+    def test_invalid_json_returns_400(self, client):
+        c, _ = client
+        resp = c.post(
+            "/api/ses-webhook",
+            content=b"not json",
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 400
+
+    def test_unknown_type_returns_ignored(self, client):
+        c, _ = client
+        resp = c.post("/api/ses-webhook", json={"Type": "Unknown"})
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ignored"
+
+
+# ---------------------------------------------------------------------------
+# Request-ID middleware
+# ---------------------------------------------------------------------------
+
+class TestRequestId:
+    def test_returns_x_request_id_header(self, client):
+        c, _ = client
+        with patch("dependencies._pg_pool", None):
+            resp = c.get("/api/health")
+        assert "x-request-id" in resp.headers
+
+    def test_echoes_provided_request_id(self, client):
+        c, _ = client
+        with patch("dependencies._pg_pool", None):
+            resp = c.get("/api/health", headers={"X-Request-ID": "test-id-123"})
+        assert resp.headers.get("x-request-id") == "test-id-123"
+
+
+# ---------------------------------------------------------------------------
+# Search
+# ---------------------------------------------------------------------------
+
+class TestSearch:
+    def test_search_returns_results(self, client):
+        c, conn = client
+        conn.fetchval = AsyncMock(return_value=1)
+        conn.fetch = AsyncMock(return_value=[_post_row()])
+
+        resp = c.get("/api/search?q=kubernetes")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "posts" in data
+        assert data["total"] == 1
+
+    def test_search_query_too_short_returns_422(self, client):
+        c, _ = client
+        resp = c.get("/api/search?q=a")
+        assert resp.status_code == 422
+
+    def test_search_query_too_long_returns_422(self, client):
+        c, _ = client
+        resp = c.get("/api/search?q=" + "x" * 201)
+        assert resp.status_code == 422
+
+    def test_search_empty_results(self, client):
+        c, conn = client
+        conn.fetchval = AsyncMock(return_value=0)
+        conn.fetch = AsyncMock(return_value=[])
+
+        resp = c.get("/api/search?q=nomatch")
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
+        assert resp.json()["posts"] == []
+
+    def test_search_pagination(self, client):
+        c, conn = client
+        conn.fetchval = AsyncMock(return_value=50)
+        conn.fetch = AsyncMock(return_value=[_post_row()])
+
+        resp = c.get("/api/search?q=devops&page=2&per_page=10")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["page"] == 2
+        assert data["per_page"] == 10
+
+    def test_search_db_error_returns_500(self, client):
+        import sys
+        asyncpg_mod = sys.modules["asyncpg"]
+        c, conn = client
+        conn.fetchval = AsyncMock(side_effect=asyncpg_mod.PostgresError())
+
+        resp = c.get("/api/search?q=trigger-error")
+        assert resp.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+
+class TestRateLimiting:
+    def test_subscribe_rate_limit_enforced(self, client):
+        """6th request in the same minute should be rate-limited."""
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=None)
+        conn.execute = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        with patch("main._try_send_verification", new_callable=AsyncMock):
+            responses = []
+            for i in range(6):
+                resp = c.post(
+                    "/api/subscribe",
+                    json={"email": f"rateuser{i}@example.com"},
+                    headers={"X-Real-IP": "10.0.0.1"},
+                )
+                responses.append(resp.status_code)
+
+        assert 429 in responses
+
+    def test_search_rate_limit_enforced(self, client):
+        """31st request in the same minute should be rate-limited."""
+        c, conn = client
+        conn.fetchval = AsyncMock(return_value=0)
+        conn.fetch = AsyncMock(return_value=[])
+
+        responses = []
+        for _ in range(31):
+            resp = c.get("/api/search?q=test", headers={"X-Real-IP": "10.0.0.2"})
+            responses.append(resp.status_code)
+
+        assert 429 in responses
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _row(**kwargs):
+    """Build a mock asyncpg Record-like dict with sensible defaults."""
+    defaults = {
+        "id": 1,
+        "status": "pending",
+        "token": "abc123def456",
+        "token_expires_at": None,
+    }
+    defaults.update(kwargs)
+    return defaults
+
+
+def _post_row(**kwargs):
+    """Build a mock post row for blog route tests."""
+    from datetime import datetime, timezone
+    defaults = {
+        "id": 1,
+        "uuid": "00000000-0000-0000-0000-000000000001",
+        "title": "Test Post",
+        "slug": "test-post",
+        "excerpt": "A test excerpt",
+        "image_url": "https://images.unsplash.com/photo-test",
+        "author": "Marie H.",
+        "published_at": datetime(2026, 3, 20, tzinfo=timezone.utc),
+    }
+    defaults.update(kwargs)
+    return defaults
+
+
+class _AsyncCM:
+    """Minimal async context manager for mocking conn.transaction()."""
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+
+def _async_cm():
+    return _AsyncCM()
