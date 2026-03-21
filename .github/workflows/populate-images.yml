@@ -1,0 +1,75 @@
+name: Populate Post Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      slug:
+        description: "Target a single post by slug (leave blank for all missing)"
+        required: false
+        default: ""
+      limit:
+        description: "Max posts to process (0 = unlimited)"
+        required: false
+        default: "20"
+      dry_run:
+        description: "Dry run — print what would be fetched without writing"
+        type: boolean
+        default: false
+
+jobs:
+  populate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install psycopg2-binary requests
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Open SSH tunnel to blog DB
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=no \
+              -L 5433:localhost:5433 \
+              -N -f \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+          echo "Tunnel established on localhost:5433"
+
+      - name: Build args
+        id: args
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.slug }}" ]; then
+            ARGS="$ARGS --slug ${{ inputs.slug }}"
+          fi
+          if [ "${{ inputs.limit }}" != "0" ]; then
+            ARGS="$ARGS --limit ${{ inputs.limit }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          echo "flags=$ARGS" >> $GITHUB_OUTPUT
+
+      - name: Populate images
+        env:
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+          PEXELS_ACCESS_KEY:   ${{ secrets.PEXELS_ACCESS_KEY }}
+          POPULATE_DB_DSN:     postgresql://cloudista:${{ secrets.BLOG_DB_PASSWORD }}@localhost:5433/cloudista
+        run: |
+          cd blog
+          python3 populate_images.py ${{ steps.args.outputs.flags }}
