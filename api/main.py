@@ -158,15 +158,18 @@ def _send_verification(email: str, token: str) -> None:
 
 @app.get("/api/health")
 def health():
-    """Liveness probe — also validates DB connectivity."""
+    """Liveness probe. Always returns 200; DB connectivity reported in body."""
+    db_ok = True
+    db_error = None
     try:
         conn = _connect()
         conn.ping()
         conn.close()
     except Exception as exc:
-        log.error("DB ping failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Database unreachable.")
-    return {"status": "ok"}
+        log.warning("DB ping failed: %s", exc)
+        db_ok = False
+        db_error = str(exc)
+    return {"status": "ok", "db": "ok" if db_ok else "unavailable", **({"db_error": db_error} if db_error else {})}
 
 
 @app.post("/api/subscribe", status_code=201)
