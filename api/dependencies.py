@@ -37,7 +37,7 @@ async def init_pool() -> None:
         database=settings.blog_db_name,
         min_size=2,
         max_size=10,
-        timeout=5.0,        # max seconds to wait for a connection
+        timeout=5.0,        # connect timeout per connection attempt
         command_timeout=30.0,
     )
     log.info("PostgreSQL connection pool initialised (min=2, max=10)")

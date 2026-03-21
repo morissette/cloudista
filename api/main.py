@@ -393,10 +393,15 @@ async def confirm(token: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
         ):
             return RedirectResponse(url=f"{settings.site_url}/?confirmed=expired", status_code=302)
         async with conn.transaction():
-            await conn.execute(
-                "UPDATE subscribers SET status='confirmed', confirmed_at=now() WHERE id=$1",
+            updated = await conn.execute(
+                "UPDATE subscribers SET status='confirmed', confirmed_at=now()"
+                " WHERE id=$1 AND status='pending'"
+                " AND (token_expires_at IS NULL OR token_expires_at >= now())",
                 row["id"],
             )
+        # If another request raced and changed status or the token just expired, treat as already/expired
+        if updated == "UPDATE 0":
+            return RedirectResponse(url=f"{settings.site_url}/?confirmed=already", status_code=302)
         return RedirectResponse(url=f"{settings.site_url}/?confirmed=true", status_code=302)
     except Exception as exc:
         log.error("confirm error: %s", exc)
@@ -420,7 +425,8 @@ async def unsubscribe_subscriber(token: str, conn: asyncpg.Connection = Depends(
             return RedirectResponse(url=f"{settings.site_url}/?unsubscribed=already", status_code=302)
         async with conn.transaction():
             await conn.execute(
-                "UPDATE subscribers SET status='unsubscribed', unsubscribed_at=now() WHERE id=$1",
+                "UPDATE subscribers SET status='unsubscribed', unsubscribed_at=now()"
+                " WHERE id=$1 AND status != 'unsubscribed'",
                 row["id"],
             )
         return RedirectResponse(url=f"{settings.site_url}/?unsubscribed=true", status_code=302)
@@ -502,12 +508,11 @@ async def ses_webhook(request: Request, conn: asyncpg.Connection = Depends(get_p
 
     if emails:
         async with conn.transaction():
-            for email in emails:
-                await conn.execute(
-                    "UPDATE subscribers SET status='unsubscribed', unsubscribed_at=now()"
-                    " WHERE email=$1 AND status != 'unsubscribed'",
-                    email,
-                )
+            await conn.execute(
+                "UPDATE subscribers SET status='unsubscribed', unsubscribed_at=now()"
+                " WHERE email = ANY($1::text[]) AND status != 'unsubscribed'",
+                emails,
+            )
         log.info("Marked unsubscribed (%s): %s", notification_type, emails)
 
     return JSONResponse(content={"status": "ok"})
