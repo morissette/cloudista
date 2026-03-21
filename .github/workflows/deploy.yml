@@ -1,0 +1,65 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Deploy mode"
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - site
+          - api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Determine deploy mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "flag=--${{ inputs.mode }}" >> $GITHUB_OUTPUT
+          else
+            # Auto-detect from changed files
+            CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "all")
+            if echo "$CHANGED" | grep -q "^api/"; then
+              if echo "$CHANGED" | grep -qvE "^api/"; then
+                echo "flag=" >> $GITHUB_OUTPUT   # both changed → full
+              else
+                echo "flag=--api" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "flag=--site" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Deploy
+        env:
+          SSH_KEY_PATH: ~/.ssh/deploy_key
+          DEPLOY_SSH_HOST: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+        run: bash deploy.sh ${{ steps.mode.outputs.flag }}
+
+      - name: Health check
+        run: |
+          sleep 3
+          curl -sf https://cloudista.org/api/health | python3 -m json.tool \
+            || echo "::warning::Health check failed — check server logs"

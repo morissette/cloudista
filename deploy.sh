@@ -11,8 +11,8 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-SSH_KEY="$HOME/.ssh/mhorg.pem"
-SSH_HOST="ec2-user@vabch.org"
+SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/mhorg.pem}"
+SSH_HOST="${DEPLOY_SSH_HOST:-ec2-user@vabch.org}"
 REMOTE_WEB="/www/cloudista.org"
 REMOTE_API="/www/cloudista.org/api"
 CONTAINER="cloudista-api"
@@ -35,13 +35,13 @@ scp_file() { scp -i "$SSH_KEY" -o StrictHostKeyChecking=no "$@"; }
 if [[ "$MODE" != "--api" ]]; then
   step "Deploying static site files..."
   # /www/ is root-owned — scp to tmp, then sudo mv into place
-  scp_file index.html style.css main.js robots.txt sitemap.xml og-image.png \
+  scp_file index.html style.css main.js robots.txt og-image.png \
     privacy.html terms.html \
     favicon.svg favicon.ico favicon-32x32.png \
     favicon-192x192.png apple-touch-icon.png site.webmanifest \
     "$SSH_HOST:/tmp/"
   ssh_cmd "sudo mv /tmp/index.html /tmp/style.css /tmp/main.js \
-    /tmp/robots.txt /tmp/sitemap.xml /tmp/og-image.png \
+    /tmp/robots.txt /tmp/og-image.png \
     /tmp/privacy.html /tmp/terms.html \
     /tmp/favicon.svg /tmp/favicon.ico /tmp/favicon-32x32.png \
     /tmp/favicon-192x192.png /tmp/apple-touch-icon.png /tmp/site.webmanifest \
