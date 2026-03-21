@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog — Cloudista</title>
+  <meta name="description" content="Cloud infrastructure tutorials, DevOps guides, and platform engineering posts from Marie Harris.">
+  <link rel="canonical" href="https://cloudista.org/blog/">
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="website">
+  <meta property="og:url"         content="https://cloudista.org/blog/">
+  <meta property="og:title"       content="Blog — Cloudista">
+  <meta property="og:description" content="Cloud infrastructure, DevOps, and platform engineering from the field.">
+  <meta property="og:image"       content="https://cloudista.org/og-image.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:title"       content="Blog — Cloudista">
+  <meta name="twitter:description" content="Cloud infrastructure, DevOps, and platform engineering from the field.">
+  <meta name="twitter:image"       content="https://cloudista.org/og-image.png">
+
+  <!-- Favicons -->
+  <link rel="icon"             href="/favicon.svg"          type="image/svg+xml">
+  <link rel="icon"             href="/favicon.ico"          sizes="any">
+  <link rel="icon"             href="/favicon-32x32.png"    type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+  <link rel="manifest"         href="/site.webmanifest">
+
+  <link rel="preload" as="style" href="/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+
+  <!-- ══════════ HEADER ══════════ -->
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a href="/" class="logo" aria-label="Cloudista — home">
+        <div class="logo__mark" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+          </svg>
+        </div>
+        Cloudista
+      </a>
+      <nav class="site-nav" aria-label="Site navigation">
+        <a href="/blog/" class="active" aria-current="page">Blog</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ══════════ BLOG LISTING ══════════ -->
+  <main class="blog-page" id="main-content">
+    <div class="container blog-page__inner">
+
+      <div class="blog-header">
+        <h1 class="blog-title">Blog</h1>
+        <p class="blog-subtitle">Cloud infrastructure, DevOps, and platform engineering from the field.</p>
+      </div>
+
+      <!-- Search + filter -->
+      <div class="blog-controls">
+        <div class="blog-search">
+          <svg class="blog-search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="search-input" class="blog-search__input" type="search" placeholder="Search posts…" aria-label="Search posts" autocomplete="off">
+        </div>
+        <div class="blog-categories" id="category-pills" role="group" aria-label="Filter by category">
+          <!-- category pills injected by JS -->
+        </div>
+      </div>
+
+      <div class="post-grid" id="post-grid" aria-live="polite" aria-label="Blog posts">
+        <!-- skeleton cards injected by JS until API responds -->
+      </div>
+
+      <div class="pagination" id="pagination" hidden>
+        <button class="pagination__btn" id="prev-btn" aria-label="Previous page">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+          Previous
+        </button>
+        <span class="pagination__info" id="page-info"></span>
+        <button class="pagination__btn" id="next-btn" aria-label="Next page">
+          Next
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ══════════ FOOTER ══════════ -->
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <p class="site-footer__copy">© 2026 Cloudista. All rights reserved.</p>
+      <nav class="site-footer__links" aria-label="Footer links">
+        <a href="mailto:admin@cloudista.org">Contact</a>
+        <a href="/privacy.html" rel="noopener noreferrer">Privacy</a>
+        <a href="/terms.html"   rel="noopener noreferrer">Terms</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="/blog/blog.js" defer></script>
+</body>
+</html>

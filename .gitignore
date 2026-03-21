@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Secrets & env
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+*.tar
+
+# Logs
+*.log
+
+# Blog content (large, managed separately via import scripts)
+blog/*.txt
+
+# Generated / build artifacts
+sitemap.xml
+review.md

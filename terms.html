@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service — Cloudista</title>
+  <meta name="description" content="Cloudista Terms of Service — the rules governing your use of cloudista.org.">
+  <link rel="icon"             href="/favicon.svg"          type="image/svg+xml">
+  <link rel="icon"             href="/favicon.ico"          sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    :root {
+      --bg:          #ffffff;
+      --bg-2:        #f8fafc;
+      --border:      #e2e8f0;
+      --border-2:    #cbd5e1;
+      --text-1:      #0f172a;
+      --text-2:      #334155;
+      --text-3:      #64748b;
+      --text-4:      #94a3b8;
+      --accent:      #2563eb;
+      --accent-dark: #1d4ed8;
+      --accent-light:#eff6ff;
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+      --max-w: 1160px;
+      --gutter: clamp(1rem, 4vw, 2rem);
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text-1);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column; min-height: 100vh;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container {
+      max-width: var(--max-w);
+      margin-inline: auto;
+      padding-inline: var(--gutter);
+    }
+
+    /* ── Header ── */
+    .site-header {
+      padding: 1.25rem 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .site-header__inner {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 9px;
+      font-size: 1.1rem; font-weight: 800;
+      color: var(--text-1); letter-spacing: -.03em;
+      text-decoration: none;
+    }
+    .logo__mark {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; flex-shrink: 0;
+    }
+    .back-link {
+      font-size: .85rem; font-weight: 500; color: var(--text-3);
+      display: flex; align-items: center; gap: 5px;
+      text-decoration: none; transition: color .15s;
+    }
+    .back-link:hover { color: var(--text-1); text-decoration: none; }
+
+    /* ── Page hero ── */
+    .page-hero {
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border);
+      padding: 3rem 0 2.5rem;
+    }
+    .page-hero__label {
+      font-size: .72rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: .6rem;
+      display: block;
+    }
+    .page-hero__title {
+      font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+      font-weight: 900; letter-spacing: -.035em;
+      color: var(--text-1); line-height: 1.15;
+      margin-bottom: .5rem;
+    }
+    .page-hero__meta {
+      font-size: .875rem; color: var(--text-4);
+    }
+
+    /* ── Document layout ── */
+    .doc-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 3rem;
+      padding: 3rem 0 5rem;
+      align-items: start;
+    }
+    @media (max-width: 760px) {
+      .doc-layout { grid-template-columns: 1fr; gap: 2rem; }
+      .doc-toc { display: none; }
+    }
+
+    /* ── TOC ── */
+    .doc-toc {
+      position: sticky; top: 1.5rem;
+    }
+    .doc-toc__title {
+      font-size: .7rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--text-4); margin-bottom: .75rem;
+    }
+    .doc-toc__list { list-style: none; display: flex; flex-direction: column; gap: .35rem; }
+    .doc-toc__list a {
+      font-size: .8rem; font-weight: 500; color: var(--text-3);
+      text-decoration: none; transition: color .15s;
+      display: block; padding: 2px 0;
+    }
+    .doc-toc__list a:hover { color: var(--accent); text-decoration: none; }
+
+    /* ── Document body ── */
+    .doc-body { max-width: 680px; }
+
+    .doc-body h2 {
+      font-size: 1.2rem; font-weight: 800;
+      color: var(--text-1); letter-spacing: -.025em;
+      margin: 2.5rem 0 .75rem;
+      padding-top: .25rem;
+      border-top: 1px solid var(--border);
+    }
+    .doc-body h2:first-child { margin-top: 0; border-top: none; }
+
+    .doc-body h3 {
+      font-size: 1rem; font-weight: 700;
+      color: var(--text-2); margin: 1.5rem 0 .5rem;
+    }
+
+    .doc-body p {
+      font-size: .9625rem; color: var(--text-2);
+      line-height: 1.8; margin-bottom: 1rem;
+    }
+
+    .doc-body ul, .doc-body ol {
+      margin: .5rem 0 1rem 1.25rem;
+    }
+    .doc-body li {
+      font-size: .9625rem; color: var(--text-2);
+      line-height: 1.8; margin-bottom: .3rem;
+    }
+
+    .doc-body strong { color: var(--text-1); font-weight: 600; }
+
+    .doc-body a { color: var(--accent); }
+    .doc-body a:hover { text-decoration: underline; }
+
+    .highlight-box {
+      background: var(--accent-light);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+    }
+    .highlight-box p { margin: 0; font-size: .9rem; color: var(--text-2); }
+
+    .disclaimer-box {
+      background: #fffbeb;
+      border-left: 3px solid #f59e0b;
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+    }
+    .disclaimer-box p { margin: 0; font-size: .875rem; color: #78350f; line-height: 1.7; }
+
+    /* ── Footer ── */
+    .site-footer {
+      border-top: 1px solid var(--border);
+      padding: 1.25rem 0;
+      background: var(--bg-2);
+    }
+    .site-footer__inner {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; flex-wrap: wrap;
+    }
+    .site-footer__copy { font-size: .78rem; color: var(--text-4); }
+    .site-footer__links { display: flex; gap: 1.25rem; }
+    .site-footer__links a {
+      font-size: .78rem; color: var(--text-4);
+      transition: color .15s; text-decoration: none;
+    }
+    .site-footer__links a:hover { color: var(--text-2); }
+  </style>
+</head>
+
+<body>
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a href="/" class="logo" aria-label="Cloudista — home">
+        <div class="logo__mark" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+          </svg>
+        </div>
+        Cloudista
+      </a>
+      <a href="/" class="back-link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5M12 5l-7 7 7 7"/>
+        </svg>
+        Back to home
+      </a>
+    </div>
+  </header>
+
+  <div class="page-hero">
+    <div class="container">
+      <span class="page-hero__label">Legal</span>
+      <h1 class="page-hero__title">Terms of Service</h1>
+      <p class="page-hero__meta">Effective date: February 25, 2026 &nbsp;·&nbsp; Last updated: February 25, 2026</p>
+    </div>
+  </div>
+
+  <main>
+    <div class="container">
+      <div class="doc-layout">
+
+        <!-- Table of contents -->
+        <nav class="doc-toc" aria-label="Page contents">
+          <p class="doc-toc__title">Contents</p>
+          <ul class="doc-toc__list">
+            <li><a href="#acceptance">Acceptance</a></li>
+            <li><a href="#description">Description of Service</a></li>
+            <li><a href="#use">Acceptable Use</a></li>
+            <li><a href="#ip">Intellectual Property</a></li>
+            <li><a href="#links">Third-Party Links</a></li>
+            <li><a href="#disclaimers">Disclaimers</a></li>
+            <li><a href="#liability">Limitation of Liability</a></li>
+            <li><a href="#indemnification">Indemnification</a></li>
+            <li><a href="#termination">Termination</a></li>
+            <li><a href="#governing">Governing Law</a></li>
+            <li><a href="#changes">Changes to Terms</a></li>
+            <li><a href="#contact">Contact</a></li>
+          </ul>
+        </nav>
+
+        <!-- Document body -->
+        <article class="doc-body">
+
+          <div class="highlight-box">
+            <p><strong>Short version:</strong> Use the Site lawfully and respectfully. We own the content we create. We provide the Site as-is and are not liable for damages arising from your use of it. These terms may change; continued use means acceptance.</p>
+          </div>
+
+          <h2 id="acceptance">1. Acceptance of Terms</h2>
+          <p>By accessing or using cloudista.org (the "Site"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, please do not use the Site. These Terms apply to all visitors and users of the Site.</p>
+
+          <h2 id="description">2. Description of Service</h2>
+          <p>Cloudista is an informational website providing cloud computing tutorials, tool comparisons, industry news, and related educational content for developers and DevOps engineers. The Site is currently in a pre-launch phase; features and content may change at any time without notice.</p>
+          <p>We reserve the right to modify, suspend, or discontinue the Site or any part of it at any time, with or without notice.</p>
+
+          <h2 id="use">3. Acceptable Use</h2>
+          <p>You agree to use the Site only for lawful purposes. You must not:</p>
+          <ul>
+            <li>Use the Site in any way that violates any applicable local, national, or international law or regulation.</li>
+            <li>Submit false, misleading, or fraudulent information through any form on the Site.</li>
+            <li>Attempt to gain unauthorised access to any part of the Site or its infrastructure.</li>
+            <li>Transmit any unsolicited or unauthorised advertising material or spam.</li>
+            <li>Use automated tools to scrape, crawl, or harvest data from the Site without our prior written consent.</li>
+            <li>Impersonate any person or entity, or misrepresent your affiliation with any person or entity.</li>
+            <li>Engage in any conduct that restricts or inhibits any other person's use or enjoyment of the Site.</li>
+          </ul>
+
+          <h2 id="ip">4. Intellectual Property</h2>
+          <p>All content on the Site — including but not limited to text, graphics, logos, icons, images, and the overall site design — is the property of Cloudista or its content suppliers and is protected by applicable copyright, trademark, and other intellectual property laws.</p>
+          <p>You are granted a limited, non-exclusive, non-transferable licence to access and use the Site for your personal, non-commercial use. You may not reproduce, distribute, modify, create derivative works of, publicly display, or otherwise exploit any content from the Site without our prior written permission.</p>
+
+          <h2 id="links">5. Third-Party Links</h2>
+          <p>The Site may contain links to third-party websites or services that are not owned or controlled by Cloudista. We have no control over, and assume no responsibility for, the content, privacy policies, or practices of any third-party websites. We strongly advise you to review the terms and privacy policy of any third-party site you visit.</p>
+
+          <h2 id="disclaimers">6. Disclaimers</h2>
+
+          <div class="disclaimer-box">
+            <p>THE SITE AND ALL CONTENT ARE PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.</p>
+          </div>
+
+          <p>We do not warrant that the Site will be uninterrupted, error-free, or free of viruses or other harmful components. The information on the Site is provided for general informational purposes only and should not be relied upon as professional, technical, or legal advice.</p>
+          <p>Cloud service features, pricing, and availability referenced on the Site are subject to change by third-party providers. Always verify current information directly with the relevant service provider before making any decisions.</p>
+
+          <h2 id="liability">7. Limitation of Liability</h2>
+
+          <div class="disclaimer-box">
+            <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, CLOUDISTA AND ITS OWNERS, EMPLOYEES, AND CONTRIBUTORS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES — INCLUDING LOSS OF PROFITS, DATA, OR GOODWILL — ARISING OUT OF OR IN CONNECTION WITH YOUR USE OF, OR INABILITY TO USE, THE SITE OR ITS CONTENT, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.</p>
+          </div>
+
+          <p>Some jurisdictions do not allow the exclusion or limitation of certain warranties or liabilities. In such jurisdictions, our liability is limited to the greatest extent permitted by law.</p>
+
+          <h2 id="indemnification">8. Indemnification</h2>
+          <p>You agree to defend, indemnify, and hold harmless Cloudista and its owners, contributors, and affiliates from and against any claims, damages, costs, and expenses (including reasonable legal fees) arising from your use of the Site, your violation of these Terms, or your infringement of any third-party rights.</p>
+
+          <h2 id="termination">9. Termination</h2>
+          <p>We may terminate or suspend your access to the Site immediately, without prior notice, for conduct that we believe violates these Terms or is harmful to other users, us, third parties, or for any other reason in our sole discretion.</p>
+
+          <h2 id="governing">10. Governing Law</h2>
+          <p>These Terms shall be governed by and construed in accordance with the laws of the United States, without regard to its conflict of law provisions. Any disputes arising under these Terms shall be resolved exclusively in a court of competent jurisdiction.</p>
+
+          <h2 id="changes">11. Changes to These Terms</h2>
+          <p>We reserve the right to update these Terms at any time. When we do, we will revise the "Last updated" date at the top of this page. Your continued use of the Site after any changes constitutes your acceptance of the new Terms. If you do not agree to the modified Terms, you must stop using the Site.</p>
+
+          <h2 id="contact">12. Contact</h2>
+          <p>If you have any questions about these Terms, please contact us at:</p>
+          <p>
+            <strong>Cloudista</strong><br>
+            <a href="mailto:admin@cloudista.org">admin@cloudista.org</a><br>
+            <a href="https://cloudista.org">cloudista.org</a>
+          </p>
+
+        </article>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <p class="site-footer__copy">&copy; 2026 Cloudista. All rights reserved.</p>
+      <nav class="site-footer__links" aria-label="Footer links">
+        <a href="mailto:admin@cloudista.org">Contact</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/terms.html">Terms</a>
+      </nav>
+    </div>
+  </footer>
+
+</body>
+</html>

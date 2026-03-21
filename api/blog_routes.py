@@ -1,0 +1,680 @@
+"""
+Blog API Routes
+---------------
+GET /api/blog/posts              – paginated list of published posts
+GET /api/blog/posts/{slug}       – single post by slug
+GET /api/blog/tags               – all tags
+GET /api/blog/categories         – all categories
+"""
+
+import html as _html
+import json as _json
+import logging
+import os
+from datetime import datetime
+from typing import Optional
+
+import psycopg2
+import psycopg2.extras
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import HTMLResponse, Response
+from pydantic import BaseModel
+
+log = logging.getLogger(__name__)
+
+# ── DB config from environment ────────────────────────────────────────────────
+
+_BLOG_DB_CONFIG: dict = {
+    "host":             os.environ.get("BLOG_DB_HOST",     "localhost"),
+    "port":             int(os.environ.get("BLOG_DB_PORT", "5433")),
+    "user":             os.environ.get("BLOG_DB_USER",     "cloudista"),
+    "password":         os.environ.get("BLOG_DB_PASSWORD", ""),
+    "dbname":           os.environ.get("BLOG_DB_NAME",     "cloudista"),
+    "connect_timeout":  5,
+}
+
+
+def _pg_connect() -> psycopg2.extensions.connection:
+    return psycopg2.connect(
+        **_BLOG_DB_CONFIG,
+        cursor_factory=psycopg2.extras.RealDictCursor,
+    )
+
+
+# ── Response schemas ──────────────────────────────────────────────────────────
+
+class PostSummary(BaseModel):
+    id:           int
+    uuid:         str
+    title:        str
+    slug:         str
+    excerpt:      Optional[str]
+    image_url:    Optional[str]
+    author:       str
+    published_at: Optional[datetime]
+
+
+class PostDetail(PostSummary):
+    content_html:  str
+    image_credit:  Optional[str]
+    tags:          list[str] = []
+    categories:    list[str] = []
+
+
+class TagOut(BaseModel):
+    id:   int
+    name: str
+    slug: str
+
+
+class CategoryOut(BaseModel):
+    id:          int
+    name:        str
+    slug:        str
+    description: Optional[str]
+    parent_id:   Optional[int]
+
+
+class PostList(BaseModel):
+    posts:   list[PostSummary]
+    total:   int
+    page:    int
+    pages:   int
+    per_page: int
+
+
+# ── Router ────────────────────────────────────────────────────────────────────
+
+router = APIRouter(prefix="/api", tags=["blog"])
+
+
+@router.get("/search", response_model=PostList)
+def search_posts(
+    q:        str = Query(..., min_length=2, max_length=200),
+    page:     int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+):
+    """Full-text search across post titles and excerpts."""
+    offset = (page - 1) * per_page
+    term = f"%{q}%"
+
+    try:
+        conn = _pg_connect()
+    except Exception as exc:
+        log.error("Blog DB connect failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Blog database unreachable.")
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM posts p JOIN authors a ON a.id = p.author_id
+                WHERE p.status = 'published'
+                  AND p.published_at <= NOW()
+                  AND (p.title ILIKE %s OR p.excerpt ILIKE %s OR p.slug ILIKE %s)
+                """,
+                (term, term, term),
+            )
+            total = cur.fetchone()["count"]
+
+            cur.execute(
+                """
+                SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,
+                       p.image_url, a.name AS author, p.published_at
+                FROM   posts p JOIN authors a ON a.id = p.author_id
+                WHERE  p.status = 'published'
+                  AND  p.published_at <= NOW()
+                  AND (p.title ILIKE %s OR p.excerpt ILIKE %s OR p.slug ILIKE %s)
+                ORDER BY p.published_at DESC LIMIT %s OFFSET %s
+                """,
+                (term, term, term, per_page, offset),
+            )
+            rows = cur.fetchall()
+    except Exception as exc:
+        log.error("search_posts error: %s", exc)
+        raise HTTPException(status_code=500, detail="Search failed.")
+    finally:
+        conn.close()
+
+    return PostList(
+        posts=[PostSummary(**dict(row)) for row in rows],
+        total=total, page=page, per_page=per_page,
+        pages=(-(-total // per_page)),
+    )
+
+
+@router.get("/posts", response_model=PostList)
+def list_posts(
+    page:     int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    tag:      Optional[str] = Query(default=None),
+    category: Optional[str] = Query(default=None),
+):
+    """
+    Return a paginated list of published posts, newest first.
+    Optionally filter by ?tag=slug or ?category=slug.
+    """
+    offset = (page - 1) * per_page
+
+    base_select = """
+        SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,
+               p.image_url, a.name AS author, p.published_at
+        FROM   posts p
+        JOIN   authors a ON a.id = p.author_id
+    """
+    base_count = "SELECT COUNT(*) FROM posts p JOIN authors a ON a.id = p.author_id"
+
+    filters   = ["p.status = 'published'", "p.published_at <= NOW()"]
+    join_extra = ""
+    params: list = []
+
+    if tag:
+        join_extra += " JOIN post_tags pt ON pt.post_id = p.id JOIN tags t ON t.id = pt.tag_id"
+        filters.append("t.slug = %s")
+        params.append(tag)
+
+    if category:
+        join_extra += " JOIN post_categories pc ON pc.post_id = p.id JOIN categories c ON c.id = pc.category_id"
+        filters.append("c.slug = %s")
+        params.append(category)
+
+    where = " WHERE " + " AND ".join(filters)
+
+    try:
+        conn = _pg_connect()
+    except Exception as exc:
+        log.error("Blog DB connect failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Blog database unreachable.")
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(base_count + join_extra + where, params)
+            total = cur.fetchone()["count"]
+
+            cur.execute(
+                base_select + join_extra + where
+                + " ORDER BY p.published_at DESC LIMIT %s OFFSET %s",
+                params + [per_page, offset],
+            )
+            rows = cur.fetchall()
+    except Exception as exc:
+        log.error("list_posts error: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to fetch posts.")
+    finally:
+        conn.close()
+
+    return PostList(
+        posts=[PostSummary(**dict(row)) for row in rows],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=(-(-total // per_page)),  # ceiling division
+    )
+
+
+@router.get("/posts/{slug}", response_model=PostDetail)
+def get_post(slug: str):
+    """Return a single published post with full HTML content, tags, and categories."""
+    try:
+        conn = _pg_connect()
+    except Exception as exc:
+        log.error("Blog DB connect failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Blog database unreachable.")
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,
+                       p.image_url, p.image_credit, p.content_html,
+                       a.name AS author, p.published_at
+                FROM   posts p
+                JOIN   authors a ON a.id = p.author_id
+                WHERE  p.slug = %s AND p.status = 'published' AND p.published_at <= NOW()
+                """,
+                (slug,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Post not found.")
+
+            cur.execute(
+                """
+                SELECT t.slug FROM tags t
+                JOIN post_tags pt ON pt.tag_id = t.id
+                WHERE pt.post_id = %s ORDER BY t.name
+                """,
+                (row["id"],),
+            )
+            tags = [r["slug"] for r in cur.fetchall()]
+
+            cur.execute(
+                """
+                SELECT c.slug FROM categories c
+                JOIN post_categories pc ON pc.category_id = c.id
+                WHERE pc.post_id = %s ORDER BY c.name
+                """,
+                (row["id"],),
+            )
+            categories = [r["slug"] for r in cur.fetchall()]
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("get_post(%s) error: %s", slug, exc)
+        raise HTTPException(status_code=500, detail="Failed to fetch post.")
+    finally:
+        conn.close()
+
+    return PostDetail(**dict(row), tags=tags, categories=categories)
+
+
+@router.get("/posts/{slug}/related", response_model=list[PostSummary])
+def related_posts(slug: str, limit: int = Query(default=4, ge=1, le=10)):
+    """Return up to `limit` published posts most related to the given slug,
+    ranked by shared category + tag overlap."""
+    try:
+        conn = _pg_connect()
+    except Exception as exc:
+        log.error("Blog DB connect failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Blog database unreachable.")
+
+    try:
+        with conn.cursor() as cur:
+            # Resolve slug → post id
+            cur.execute(
+                "SELECT id FROM posts WHERE slug = %s AND status = 'published' AND published_at <= NOW()",
+                (slug,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Post not found.")
+            post_id = row["id"]
+
+            cur.execute(
+                """
+                SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,
+                       p.image_url, a.name AS author, p.published_at
+                FROM   posts p
+                JOIN   authors a ON a.id = p.author_id
+                LEFT JOIN post_categories pc2
+                       ON pc2.post_id = p.id
+                      AND pc2.category_id IN (
+                            SELECT category_id FROM post_categories WHERE post_id = %s
+                          )
+                LEFT JOIN post_tags pt2
+                       ON pt2.post_id = p.id
+                      AND pt2.tag_id IN (
+                            SELECT tag_id FROM post_tags WHERE post_id = %s
+                          )
+                WHERE  p.status = 'published'
+                  AND  p.published_at <= NOW()
+                  AND  p.id != %s
+                  AND  (pc2.category_id IS NOT NULL OR pt2.tag_id IS NOT NULL)
+                GROUP  BY p.id, p.uuid, p.title, p.slug, p.excerpt, p.image_url, a.name, p.published_at
+                ORDER  BY COUNT(DISTINCT pc2.category_id) + COUNT(DISTINCT pt2.tag_id) DESC,
+                          p.published_at DESC
+                LIMIT  %s
+                """,
+                (post_id, post_id, post_id, limit),
+            )
+            rows = cur.fetchall()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("related_posts(%s) error: %s", slug, exc)
+        raise HTTPException(status_code=500, detail="Failed to fetch related posts.")
+    finally:
+        conn.close()
+
+    return [PostSummary(**dict(r)) for r in rows]
+
+
+@router.get("/tags", response_model=list[TagOut])
+def list_tags():
+    """Return all tags that have at least one published post."""
+    try:
+        conn = _pg_connect()
+    except Exception as exc:
+        log.error("Blog DB connect failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Blog database unreachable.")
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT t.id, t.name, t.slug
+                FROM   tags t
+                JOIN   post_tags pt ON pt.tag_id = t.id
+                JOIN   posts p      ON p.id = pt.post_id
+                WHERE  p.status = 'published' AND p.published_at <= NOW()
+                ORDER  BY t.name
+                """
+            )
+            return [TagOut(**dict(r)) for r in cur.fetchall()]
+    except Exception as exc:
+        log.error("list_tags error: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to fetch tags.")
+    finally:
+        conn.close()
+
+
+@router.get("/categories", response_model=list[CategoryOut])
+def list_categories():
+    """Return all categories that have at least one published post."""
+    try:
+        conn = _pg_connect()
+    except Exception as exc:
+        log.error("Blog DB connect failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Blog database unreachable.")
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT c.id, c.name, c.slug, c.description, c.parent_id
+                FROM   categories c
+                JOIN   post_categories pc ON pc.category_id = c.id
+                JOIN   posts p            ON p.id = pc.post_id
+                WHERE  p.status = 'published' AND p.published_at <= NOW()
+                ORDER  BY c.name
+                """
+            )
+            return [CategoryOut(**dict(r)) for r in cur.fetchall()]
+    except Exception as exc:
+        log.error("list_categories error: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to fetch categories.")
+    finally:
+        conn.close()
+
+
+# ── Sitemap ────────────────────────────────────────────────────────────────────
+
+_SITE_ROOT = "https://cloudista.org"
+
+_SITEMAP_STATIC = [
+    {"loc": f"{_SITE_ROOT}/",       "priority": "1.0", "changefreq": "weekly"},
+    {"loc": f"{_SITE_ROOT}/blog/",  "priority": "0.9", "changefreq": "daily"},
+]
+
+
+def _xml_escape(s: str) -> str:
+    return (
+        s.replace("&", "&amp;")
+         .replace("<", "&lt;")
+         .replace(">", "&gt;")
+         .replace('"', "&quot;")
+         .replace("'", "&apos;")
+    )
+
+
+@router.get("/sitemap.xml", include_in_schema=False)
+def sitemap():
+    """Dynamically generate sitemap.xml from all published posts."""
+    try:
+        conn = _pg_connect()
+    except Exception as exc:
+        log.error("Blog DB connect failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Blog database unreachable.")
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT slug, published_at AS lastmod
+                FROM   posts
+                WHERE  status = 'published'
+                  AND  published_at <= NOW()
+                ORDER  BY published_at DESC
+                """
+            )
+            posts = cur.fetchall()
+    except Exception as exc:
+        log.error("sitemap error: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to generate sitemap.")
+    finally:
+        conn.close()
+
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+
+    for entry in _SITEMAP_STATIC:
+        lines.append("  <url>")
+        lines.append(f"    <loc>{entry['loc']}</loc>")
+        lines.append(f"    <changefreq>{entry['changefreq']}</changefreq>")
+        lines.append(f"    <priority>{entry['priority']}</priority>")
+        lines.append("  </url>")
+
+    for row in posts:
+        loc     = f"{_SITE_ROOT}/blog/{_xml_escape(row['slug'])}"
+        lastmod = row["lastmod"]
+        lastmod_str = lastmod.strftime("%Y-%m-%d") if lastmod else ""
+        lines.append("  <url>")
+        lines.append(f"    <loc>{loc}</loc>")
+        if lastmod_str:
+            lines.append(f"    <lastmod>{lastmod_str}</lastmod>")
+        lines.append("    <changefreq>monthly</changefreq>")
+        lines.append("    <priority>0.7</priority>")
+        lines.append("  </url>")
+
+    lines.append("</urlset>")
+
+    return Response(
+        content="\n".join(lines),
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+# ── Server-rendered post pages (for SEO / Googlebot) ──────────────────────────
+
+html_router = APIRouter(tags=["blog"])
+
+_POST_HTML_TEMPLATE = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title_escaped} — Cloudista</title>
+  <meta name="description" content="{desc_escaped}">
+  <link rel="canonical" href="{post_url_escaped}">
+
+  <meta property="og:type"        content="article">
+  <meta property="og:url"         content="{post_url_escaped}">
+  <meta property="og:title"       content="{title_escaped}">
+  <meta property="og:description" content="{desc_escaped}">
+  <meta property="og:image"       content="{og_image_escaped}">
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:title"       content="{title_escaped}">
+  <meta name="twitter:description" content="{desc_escaped}">
+  <meta name="twitter:image"       content="{og_image_escaped}">
+
+  <script type="application/ld+json">{json_ld}</script>
+
+  <link rel="icon"             href="/favicon.svg"          type="image/svg+xml">
+  <link rel="icon"             href="/favicon.ico"          sizes="any">
+  <link rel="icon"             href="/favicon-32x32.png"    type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+  <link rel="manifest"         href="/site.webmanifest">
+
+  <link rel="preload" as="style" href="/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a href="/" class="logo" aria-label="Cloudista — home">
+        <div class="logo__mark" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+          </svg>
+        </div>
+        Cloudista
+      </a>
+      <nav class="site-nav" aria-label="Site navigation">
+        <a href="/blog/" class="active">Blog</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="post-page" id="main-content">
+    <div class="container">
+
+      <a href="/blog/" class="post-back" aria-label="Back to Blog">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Blog
+      </a>
+
+      <div id="post-content" data-prerendered="true" data-slug="{slug_escaped}">
+        <header class="post-header" id="post-header">
+          <div class="post-header__meta" id="post-meta">
+            <span>{pub_date_display_escaped}</span>
+            <span aria-hidden="true">·</span>
+            <span>{author_escaped}</span>
+          </div>
+          <h1 class="post-header__title" id="post-title">{title_escaped}</h1>
+        </header>
+        {hero_html}
+        <article class="post-body" id="post-body">{content_html}</article>
+        <aside class="related-posts" id="related-posts" hidden></aside>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <p class="site-footer__copy">© 2026 Cloudista. All rights reserved.</p>
+      <nav class="site-footer__links" aria-label="Footer links">
+        <a href="mailto:admin@cloudista.org">Contact</a>
+        <a href="/privacy.html" rel="noopener noreferrer">Privacy</a>
+        <a href="/terms.html"   rel="noopener noreferrer">Terms</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="/blog/blog.js" defer></script>
+</body>
+</html>"""
+
+
+def _render_post_html(row: dict, tags: list, categories: list) -> str:
+    e = _html.escape
+    title    = row.get("title") or ""
+    slug     = row.get("slug") or ""
+    author   = row.get("author") or "Marie H."
+    excerpt  = row.get("excerpt") or title
+    c_html   = row.get("content_html") or ""
+    image    = row.get("image_url") or ""
+    credit   = row.get("image_credit") or ""
+    pub      = row.get("published_at")
+
+    post_url = f"https://cloudista.org/blog/{slug}"
+    og_image = image if image else "https://cloudista.org/og-image.png"
+
+    pub_date         = pub.strftime("%Y-%m-%d") if pub else ""
+    pub_date_display = (
+        f"{pub.strftime('%B')} {pub.day}, {pub.year}" if pub else ""
+    )
+
+    json_ld = _json.dumps({
+        "@context":      "https://schema.org",
+        "@type":         "BlogPosting",
+        "headline":      title,
+        "description":   excerpt,
+        "datePublished": pub_date,
+        "dateModified":  pub_date,
+        "author":        {"@type": "Person", "name": author},
+        "url":           post_url,
+        "publisher":     {"@type": "Organization", "name": "Cloudista",
+                          "url": "https://cloudista.org"},
+    }, ensure_ascii=False)
+
+    if image:
+        credit_html = (
+            f'<p class="post-hero__credit" id="post-hero-credit">{credit}</p>'
+            if credit else ""
+        )
+        hero_html = (
+            f'<div class="post-hero" id="post-hero">'
+            f'<img class="post-hero__img" id="post-hero-img"'
+            f' src="{e(image)}" alt="{e(title)}" loading="lazy">'
+            f'{credit_html}</div>'
+        )
+    else:
+        hero_html = ""
+
+    return _POST_HTML_TEMPLATE.format(
+        title_escaped           = e(title),
+        desc_escaped            = e(excerpt),
+        post_url_escaped        = e(post_url),
+        og_image_escaped        = e(og_image),
+        slug_escaped            = e(slug),
+        pub_date_display_escaped= e(pub_date_display),
+        author_escaped          = e(author),
+        json_ld                 = json_ld,
+        hero_html               = hero_html,
+        content_html            = c_html,
+    )
+
+
+@html_router.get("/blog/{slug}", response_class=HTMLResponse, include_in_schema=False)
+def render_post_page(slug: str):
+    """Return a server-rendered HTML page for a blog post (SEO / crawlers)."""
+    try:
+        conn = _pg_connect()
+    except Exception as exc:
+        log.error("Blog DB connect failed: %s", exc)
+        raise HTTPException(status_code=503)
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT p.id, p.title, p.slug, p.excerpt,
+                       p.image_url, p.image_credit, p.content_html,
+                       a.name AS author, p.published_at
+                FROM   posts p JOIN authors a ON a.id = p.author_id
+                WHERE  p.slug = %s AND p.status = 'published'
+                  AND  p.published_at <= NOW()
+                """,
+                (slug,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Post not found.")
+
+            cur.execute(
+                "SELECT t.slug FROM tags t JOIN post_tags pt ON pt.tag_id = t.id"
+                " WHERE pt.post_id = %s ORDER BY t.name",
+                (row["id"],),
+            )
+            tags = [r["slug"] for r in cur.fetchall()]
+
+            cur.execute(
+                "SELECT c.slug FROM categories c JOIN post_categories pc ON pc.category_id = c.id"
+                " WHERE pc.post_id = %s ORDER BY c.name",
+                (row["id"],),
+            )
+            categories = [r["slug"] for r in cur.fetchall()]
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("render_post_page(%s) error: %s", slug, exc)
+        raise HTTPException(status_code=500)
+    finally:
+        conn.close()
+
+    return HTMLResponse(
+        content=_render_post_html(dict(row), tags, categories),
+        headers={"Cache-Control": "public, max-age=600, must-revalidate"},
+    )

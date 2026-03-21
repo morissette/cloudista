@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Cloudista</title>
+  <meta name="description" content="Cloudista Privacy Policy — how we collect, use, and protect your information.">
+  <link rel="icon"             href="/favicon.svg"          type="image/svg+xml">
+  <link rel="icon"             href="/favicon.ico"          sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    :root {
+      --bg:          #ffffff;
+      --bg-2:        #f8fafc;
+      --border:      #e2e8f0;
+      --border-2:    #cbd5e1;
+      --text-1:      #0f172a;
+      --text-2:      #334155;
+      --text-3:      #64748b;
+      --text-4:      #94a3b8;
+      --accent:      #2563eb;
+      --accent-dark: #1d4ed8;
+      --accent-light:#eff6ff;
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+      --max-w: 1160px;
+      --gutter: clamp(1rem, 4vw, 2rem);
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text-1);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column; min-height: 100vh;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container {
+      max-width: var(--max-w);
+      margin-inline: auto;
+      padding-inline: var(--gutter);
+    }
+
+    /* ── Header ── */
+    .site-header {
+      padding: 1.25rem 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .site-header__inner {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 9px;
+      font-size: 1.1rem; font-weight: 800;
+      color: var(--text-1); letter-spacing: -.03em;
+      text-decoration: none;
+    }
+    .logo__mark {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; flex-shrink: 0;
+    }
+    .back-link {
+      font-size: .85rem; font-weight: 500; color: var(--text-3);
+      display: flex; align-items: center; gap: 5px;
+      text-decoration: none; transition: color .15s;
+    }
+    .back-link:hover { color: var(--text-1); text-decoration: none; }
+
+    /* ── Page hero ── */
+    .page-hero {
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border);
+      padding: 3rem 0 2.5rem;
+    }
+    .page-hero__label {
+      font-size: .72rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: .6rem;
+      display: block;
+    }
+    .page-hero__title {
+      font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+      font-weight: 900; letter-spacing: -.035em;
+      color: var(--text-1); line-height: 1.15;
+      margin-bottom: .5rem;
+    }
+    .page-hero__meta {
+      font-size: .875rem; color: var(--text-4);
+    }
+
+    /* ── Document layout ── */
+    .doc-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 3rem;
+      padding: 3rem 0 5rem;
+      align-items: start;
+    }
+    @media (max-width: 760px) {
+      .doc-layout { grid-template-columns: 1fr; gap: 2rem; }
+      .doc-toc { display: none; }
+    }
+
+    /* ── TOC ── */
+    .doc-toc {
+      position: sticky; top: 1.5rem;
+    }
+    .doc-toc__title {
+      font-size: .7rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--text-4); margin-bottom: .75rem;
+    }
+    .doc-toc__list { list-style: none; display: flex; flex-direction: column; gap: .35rem; }
+    .doc-toc__list a {
+      font-size: .8rem; font-weight: 500; color: var(--text-3);
+      text-decoration: none; transition: color .15s;
+      display: block; padding: 2px 0;
+    }
+    .doc-toc__list a:hover { color: var(--accent); text-decoration: none; }
+
+    /* ── Document body ── */
+    .doc-body { max-width: 680px; }
+
+    .doc-body h2 {
+      font-size: 1.2rem; font-weight: 800;
+      color: var(--text-1); letter-spacing: -.025em;
+      margin: 2.5rem 0 .75rem;
+      padding-top: .25rem;
+      border-top: 1px solid var(--border);
+    }
+    .doc-body h2:first-child { margin-top: 0; border-top: none; }
+
+    .doc-body h3 {
+      font-size: 1rem; font-weight: 700;
+      color: var(--text-2); margin: 1.5rem 0 .5rem;
+    }
+
+    .doc-body p {
+      font-size: .9625rem; color: var(--text-2);
+      line-height: 1.8; margin-bottom: 1rem;
+    }
+
+    .doc-body ul, .doc-body ol {
+      margin: .5rem 0 1rem 1.25rem;
+    }
+    .doc-body li {
+      font-size: .9625rem; color: var(--text-2);
+      line-height: 1.8; margin-bottom: .3rem;
+    }
+
+    .doc-body strong { color: var(--text-1); font-weight: 600; }
+
+    .doc-body a { color: var(--accent); }
+    .doc-body a:hover { text-decoration: underline; }
+
+    .highlight-box {
+      background: var(--accent-light);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+    }
+    .highlight-box p { margin: 0; font-size: .9rem; color: var(--text-2); }
+
+    /* ── Footer ── */
+    .site-footer {
+      border-top: 1px solid var(--border);
+      padding: 1.25rem 0;
+      background: var(--bg-2);
+    }
+    .site-footer__inner {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; flex-wrap: wrap;
+    }
+    .site-footer__copy { font-size: .78rem; color: var(--text-4); }
+    .site-footer__links { display: flex; gap: 1.25rem; }
+    .site-footer__links a {
+      font-size: .78rem; color: var(--text-4);
+      transition: color .15s; text-decoration: none;
+    }
+    .site-footer__links a:hover { color: var(--text-2); }
+  </style>
+</head>
+
+<body>
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a href="/" class="logo" aria-label="Cloudista — home">
+        <div class="logo__mark" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+          </svg>
+        </div>
+        Cloudista
+      </a>
+      <a href="/" class="back-link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5M12 5l-7 7 7 7"/>
+        </svg>
+        Back to home
+      </a>
+    </div>
+  </header>
+
+  <div class="page-hero">
+    <div class="container">
+      <span class="page-hero__label">Legal</span>
+      <h1 class="page-hero__title">Privacy Policy</h1>
+      <p class="page-hero__meta">Effective date: February 25, 2026 &nbsp;·&nbsp; Last updated: February 25, 2026</p>
+    </div>
+  </div>
+
+  <main>
+    <div class="container">
+      <div class="doc-layout">
+
+        <!-- Table of contents -->
+        <nav class="doc-toc" aria-label="Page contents">
+          <p class="doc-toc__title">Contents</p>
+          <ul class="doc-toc__list">
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#information">Information We Collect</a></li>
+            <li><a href="#use">How We Use It</a></li>
+            <li><a href="#sharing">Sharing &amp; Disclosure</a></li>
+            <li><a href="#retention">Data Retention</a></li>
+            <li><a href="#security">Security</a></li>
+            <li><a href="#rights">Your Rights</a></li>
+            <li><a href="#cookies">Cookies</a></li>
+            <li><a href="#children">Children</a></li>
+            <li><a href="#changes">Changes</a></li>
+            <li><a href="#contact">Contact</a></li>
+          </ul>
+        </nav>
+
+        <!-- Document body -->
+        <article class="doc-body">
+
+          <div class="highlight-box">
+            <p><strong>Short version:</strong> We only collect your email address (and basic request metadata) when you sign up for launch notifications. We use it to send you a single confirmation email and, later, a launch announcement. We do not sell your data, ever.</p>
+          </div>
+
+          <h2 id="overview">1. Overview</h2>
+          <p>Cloudista ("we", "us", or "our") operates cloudista.org (the "Site"). This Privacy Policy explains what personal information we collect, how we use it, and what choices you have. By using the Site or submitting your email address, you agree to the practices described here.</p>
+
+          <h2 id="information">2. Information We Collect</h2>
+
+          <h3>Information you provide</h3>
+          <ul>
+            <li><strong>Email address</strong> — when you submit the "Notify Me" form on the Site.</li>
+          </ul>
+
+          <h3>Information collected automatically</h3>
+          <p>When you visit the Site or submit the form, our servers automatically receive:</p>
+          <ul>
+            <li><strong>IP address</strong> — used for basic spam and abuse prevention.</li>
+            <li><strong>User-agent string</strong> — the browser/device identifier sent by your browser.</li>
+            <li><strong>Referrer URL and page request logs</strong> — standard web server access logs retained for up to 30 days.</li>
+          </ul>
+          <p>We do not use third-party analytics scripts, advertising trackers, or fingerprinting on this Site.</p>
+
+          <h2 id="use">3. How We Use Your Information</h2>
+          <p>We use the information we collect for the following purposes:</p>
+          <ul>
+            <li>To send you a one-time email confirmation to verify your subscription.</li>
+            <li>To notify you when Cloudista launches.</li>
+            <li>To prevent duplicate or fraudulent sign-ups.</li>
+            <li>To comply with legal obligations.</li>
+          </ul>
+          <p>We will not use your email address for any other purpose without your explicit consent.</p>
+
+          <h2 id="sharing">4. Sharing &amp; Disclosure</h2>
+          <p>We do not sell, rent, or trade your personal information. We may share data only in the following limited circumstances:</p>
+          <ul>
+            <li><strong>Service providers:</strong> We use Amazon Web Services (AWS Simple Email Service) to send transactional emails. AWS processes your email address on our behalf under their <a href="https://aws.amazon.com/privacy/" target="_blank" rel="noopener noreferrer">Privacy Policy</a>. No other third parties receive your data.</li>
+            <li><strong>Legal requirements:</strong> We may disclose information if required to do so by law or in response to a valid legal process.</li>
+            <li><strong>Business transfer:</strong> If Cloudista is acquired or merged, subscriber data may be transferred as part of that transaction. You will be notified before your data is subject to a different privacy policy.</li>
+          </ul>
+
+          <h2 id="retention">5. Data Retention</h2>
+          <p>We retain your email address for as long as you remain subscribed. If you unsubscribe, your record is marked as inactive and purged from our active mailing list. Anonymised aggregate statistics (e.g. total subscriber counts) may be retained indefinitely.</p>
+
+          <h2 id="security">6. Security</h2>
+          <p>We take reasonable technical measures to protect your data, including encrypted HTTPS connections, restricted database access, and per-subscriber tokens for confirmation and unsubscribe links. No method of transmission over the Internet is 100% secure; we cannot guarantee absolute security.</p>
+
+          <h2 id="rights">7. Your Rights</h2>
+          <p>Depending on where you live, you may have rights regarding your personal data, including the right to access, correct, or delete it. To exercise any of these rights, or to unsubscribe at any time, contact us at <a href="mailto:admin@cloudista.org">admin@cloudista.org</a>. We will respond within 30 days.</p>
+
+          <h2 id="cookies">8. Cookies</h2>
+          <p>The Site does not set any cookies or use local storage. We do not use analytics cookies, advertising cookies, or any persistent tracking technologies.</p>
+
+          <h2 id="children">9. Children's Privacy</h2>
+          <p>The Site is not directed at children under the age of 13. We do not knowingly collect personal information from children. If you believe a child has provided us with their information, please contact us and we will delete it promptly.</p>
+
+          <h2 id="changes">10. Changes to This Policy</h2>
+          <p>We may update this Privacy Policy from time to time. When we do, we will revise the "Last updated" date at the top of this page. If the changes are material, we will notify subscribers by email.</p>
+
+          <h2 id="contact">11. Contact</h2>
+          <p>If you have any questions about this Privacy Policy or how we handle your data, please contact us at:</p>
+          <p>
+            <strong>Cloudista</strong><br>
+            <a href="mailto:admin@cloudista.org">admin@cloudista.org</a><br>
+            <a href="https://cloudista.org">cloudista.org</a>
+          </p>
+
+        </article>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <p class="site-footer__copy">&copy; 2026 Cloudista. All rights reserved.</p>
+      <nav class="site-footer__links" aria-label="Footer links">
+        <a href="mailto:admin@cloudista.org">Contact</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/terms.html">Terms</a>
+      </nav>
+    </div>
+  </footer>
+
+</body>
+</html>

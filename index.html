@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloudista — Coming Soon</title>
+  <meta name="description" content="Cloudista is coming — your all-in-one resource for cloud tutorials, tool comparisons, and industry news. Built for DevOps and platform engineers.">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://cloudista.org">
+
+  <!-- Open Graph -->
+  <meta property="og:type"         content="website">
+  <meta property="og:url"          content="https://cloudista.org">
+  <meta property="og:title"        content="Cloudista — Coming Soon">
+  <meta property="og:description"  content="Your all-in-one cloud resource for DevOps and platform engineers. Launching April 2026.">
+  <meta property="og:image"        content="https://cloudista.org/og-image.png">
+  <meta property="og:image:width"  content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:title"       content="Cloudista — Coming Soon">
+  <meta name="twitter:description" content="Your all-in-one cloud resource for DevOps and platform engineers. Launching April 2026.">
+  <meta name="twitter:image"       content="https://cloudista.org/og-image.png">
+
+  <!-- JSON-LD structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Cloudista",
+    "url": "https://cloudista.org",
+    "description": "Cloud tutorials, tool comparisons, and news for DevOps and platform engineers."
+  }
+  </script>
+
+  <!-- Favicons -->
+  <link rel="icon"             href="/favicon.svg"           type="image/svg+xml">
+  <link rel="icon"             href="/favicon.ico"           sizes="any">
+  <link rel="icon"             href="/favicon-32x32.png"     type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png"  sizes="180x180">
+  <link rel="manifest"         href="/site.webmanifest">
+  <link rel="preload" as="style" href="/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+
+  <!-- Confirmation banner — shown after clicking the email verification link -->
+  <div class="confirm-banner" id="confirm-banner" role="alert" aria-live="polite"></div>
+
+  <!-- ══════════ HEADER ══════════ -->
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a href="/" class="logo" aria-label="Cloudista — home">
+        <div class="logo__mark" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+          </svg>
+        </div>
+        Cloudista
+      </a>
+      <nav class="site-nav" aria-label="Site navigation">
+        <a href="/blog/">Blog</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ══════════ MAIN ══════════ -->
+  <main class="page-main" id="main-content">
+    <div class="orb orb-1" aria-hidden="true"></div>
+    <div class="orb orb-2" aria-hidden="true"></div>
+
+    <div class="container page-main__inner">
+      <div class="cs-body">
+
+        <div class="pill" aria-hidden="true">
+          <span class="pill__dot"></span>
+          Launching Soon
+        </div>
+
+        <h1 class="cs-title">
+          All Things Cloud,<br>
+          <span class="gradient-text">One Place.</span>
+        </h1>
+
+        <p class="cs-sub">
+          Cloudista is your go-to resource for cloud tutorials, head-to-head
+          tool comparisons, and daily news across AWS, Azure, GCP, and the
+          broader cloud-native ecosystem. Built for DevOps and platform engineers.
+        </p>
+
+        <!-- Email signup -->
+        <form class="signup-form" id="signup-form" novalidate>
+          <label for="email-input" class="sr-only">Email address</label>
+          <input
+            type="email"
+            id="email-input"
+            class="signup-form__input"
+            placeholder="you@company.com"
+            required
+            autocomplete="email"
+          >
+          <button type="submit" class="btn btn-primary" id="signup-btn">
+            Notify Me
+          </button>
+          <!-- Honeypot: off-screen, bots fill it, keyboard users skip it -->
+          <div class="hp-field" aria-hidden="true">
+            <label for="website">Website</label>
+            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+          </div>
+        </form>
+
+        <!-- CAPTCHA widget: injected here when bot heuristics are triggered -->
+        <div id="captcha-wrap" style="display:none;"></div>
+
+        <div class="signup-success" id="signup-success" role="status" aria-live="polite">
+          <span class="signup-success__icon" aria-hidden="true">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                 stroke="#059669" stroke-width="3"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </span>
+          <span data-msg>Check your email — we've sent you a confirmation link.</span>
+        </div>
+
+        <p class="signup-note" id="signup-note">
+          Be the first to know. No spam, ever.
+        </p>
+
+        <!-- Inline error (hidden by default) -->
+        <p id="signup-error" style="display:none; margin-top:.5rem; font-size:.8rem; color:#dc2626;" role="alert"></p>
+
+        <!-- Countdown -->
+        <div class="countdown" aria-label="Time until launch">
+          <div class="countdown__label">Launching in</div>
+          <div class="countdown__grid" role="timer" aria-live="off">
+            <div class="countdown__unit">
+              <span class="countdown__num" id="cd-days">--</span>
+              <span class="countdown__seg">Days</span>
+            </div>
+            <span class="countdown__sep" aria-hidden="true">:</span>
+            <div class="countdown__unit">
+              <span class="countdown__num" id="cd-hours">--</span>
+              <span class="countdown__seg">Hours</span>
+            </div>
+            <span class="countdown__sep" aria-hidden="true">:</span>
+            <div class="countdown__unit">
+              <span class="countdown__num" id="cd-mins">--</span>
+              <span class="countdown__seg">Mins</span>
+            </div>
+            <span class="countdown__sep" aria-hidden="true">:</span>
+            <div class="countdown__unit">
+              <span class="countdown__num" id="cd-secs">--</span>
+              <span class="countdown__seg">Secs</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- What's coming chips -->
+        <div class="coming-chips" aria-label="What's coming">
+          <span class="chip chip--blue">
+            <span class="chip__dot" aria-hidden="true"></span>
+            Tutorials &amp; Guides
+          </span>
+          <span class="chip chip--green">
+            <span class="chip__dot" aria-hidden="true"></span>
+            Tool Comparisons
+          </span>
+          <span class="chip chip--purple">
+            <span class="chip__dot" aria-hidden="true"></span>
+            News &amp; Updates
+          </span>
+          <span class="chip chip--orange">
+            <span class="chip__dot" aria-hidden="true"></span>
+            AWS · Azure · GCP · K8s
+          </span>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- ══════════ FOOTER ══════════ -->
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <p class="site-footer__copy">© 2026 Cloudista. All rights reserved.</p>
+      <nav class="site-footer__links" aria-label="Footer links">
+        <a href="mailto:admin@cloudista.org">Contact</a>
+        <a href="/privacy.html" rel="noopener noreferrer">Privacy</a>
+        <a href="/terms.html"   rel="noopener noreferrer">Terms</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="/main.js" defer></script>
+
+</body>
+</html>

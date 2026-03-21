@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloudista — All Things Cloud</title>
+  <meta name="description" content="Cloudista is your all-in-one resource for cloud tutorials, tool comparisons, and industry news. Built for DevOps and platform engineers.">
+  <meta property="og:title" content="Cloudista — All Things Cloud">
+  <meta property="og:description" content="Tutorials, tool comparisons, and cloud news for DevOps and platform engineers.">
+  <meta property="og:url" content="https://cloudista.org">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ─── Reset ─── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    /* ─── Design tokens ─── */
+    :root {
+      --bg:           #ffffff;
+      --bg-2:         #f8fafc;
+      --bg-3:         #f1f5f9;
+      --border:       #e2e8f0;
+      --border-2:     #cbd5e1;
+
+      --text-1:       #0f172a;
+      --text-2:       #334155;
+      --text-3:       #64748b;
+      --text-4:       #94a3b8;
+
+      --accent:       #2563eb;
+      --accent-dark:  #1d4ed8;
+      --accent-light: #eff6ff;
+      --accent-ring:  #bfdbfe;
+
+      --green:        #059669;
+      --green-light:  #ecfdf5;
+      --orange:       #ea580c;
+      --orange-light: #fff7ed;
+      --purple:       #7c3aed;
+      --purple-light: #f5f3ff;
+
+      --font:   'Inter', system-ui, -apple-system, sans-serif;
+      --mono:   'JetBrains Mono', 'Fira Code', monospace;
+
+      --r-sm:   6px;
+      --r-md:   10px;
+      --r-lg:   16px;
+
+      --sh-sm:  0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+      --sh-md:  0 4px 12px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.04);
+      --sh-lg:  0 10px 24px rgba(0,0,0,.08), 0 4px 8px rgba(0,0,0,.04);
+
+      --max-w:  1160px;
+      --gutter: clamp(1rem, 4vw, 2rem);
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text-1);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .container {
+      max-width: var(--max-w);
+      margin-inline: auto;
+      padding-inline: var(--gutter);
+    }
+
+    /* ─── Utility ─── */
+    .sr-only {
+      position: absolute; width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+
+    /* ─── Buttons ─── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--font); font-size: .9rem; font-weight: 600;
+      padding: 8px 18px; border-radius: var(--r-sm);
+      border: 1.5px solid transparent;
+      cursor: pointer; transition: all .15s ease;
+      white-space: nowrap; text-decoration: none;
+    }
+    .btn-lg { font-size: 1rem; padding: 12px 24px; border-radius: var(--r-md); }
+
+    .btn-primary {
+      background: var(--accent); color: #fff;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover {
+      background: var(--accent-dark); border-color: var(--accent-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(37,99,235,.32);
+    }
+
+    .btn-ghost {
+      background: transparent; color: var(--text-2);
+      border-color: var(--border);
+    }
+    .btn-ghost:hover { background: var(--bg-3); color: var(--text-1); border-color: var(--border-2); }
+
+    .btn-outline {
+      background: transparent; color: var(--accent);
+      border-color: var(--accent-ring);
+    }
+    .btn-outline:hover { background: var(--accent-light); }
+
+    /* ════════════════════════════════════════
+       NAV
+    ════════════════════════════════════════ */
+    .nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,.88);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      height: 62px; display: flex; align-items: center;
+      transition: box-shadow .2s;
+    }
+    .nav--scrolled { box-shadow: 0 1px 12px rgba(0,0,0,.07); }
+
+    .nav__inner {
+      display: flex; align-items: center;
+      justify-content: space-between; width: 100%; gap: 1rem;
+    }
+
+    .nav__logo {
+      display: flex; align-items: center; gap: 9px;
+      font-size: 1.1rem; font-weight: 800;
+      color: var(--text-1); letter-spacing: -.03em;
+      flex-shrink: 0;
+    }
+    .nav__logo-mark {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; flex-shrink: 0;
+    }
+
+    .nav__links {
+      display: flex; align-items: center; gap: 2px;
+      list-style: none;
+    }
+    @media (max-width: 700px) { .nav__links { display: none; } }
+
+    .nav__links a {
+      font-size: .875rem; font-weight: 500; color: var(--text-3);
+      padding: 6px 11px; border-radius: var(--r-sm);
+      transition: background .15s, color .15s;
+    }
+    .nav__links a:hover { background: var(--bg-3); color: var(--text-1); }
+
+    .nav__actions { display: flex; align-items: center; gap: 8px; }
+
+    .nav__hamburger {
+      display: none; background: none; border: none;
+      cursor: pointer; color: var(--text-2); padding: 4px;
+      border-radius: var(--r-sm);
+    }
+    @media (max-width: 700px) { .nav__hamburger { display: flex; } }
+
+    /* ════════════════════════════════════════
+       HERO
+    ════════════════════════════════════════ */
+    .hero {
+      padding: clamp(4.5rem, 11vw, 8rem) 0 clamp(3rem, 8vw, 6rem);
+      position: relative; overflow: hidden;
+    }
+
+    /* Dot-grid background */
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: radial-gradient(circle at 1px 1px, #dde3ec 1px, transparent 0);
+      background-size: 28px 28px;
+      z-index: 0;
+    }
+
+    /* Bottom fade */
+    .hero::after {
+      content: '';
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 180px;
+      background: linear-gradient(to top, var(--bg), transparent);
+      z-index: 1;
+    }
+
+    .hero__orb {
+      position: absolute; border-radius: 50%;
+      pointer-events: none; z-index: 0;
+    }
+    .hero__orb-1 {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(37,99,235,.10) 0%, transparent 65%);
+      top: -180px; right: -100px;
+      filter: blur(40px);
+    }
+    .hero__orb-2 {
+      width: 440px; height: 440px;
+      background: radial-gradient(circle, rgba(124,58,237,.07) 0%, transparent 65%);
+      bottom: -60px; left: 5%;
+      filter: blur(40px);
+    }
+
+    .hero__body {
+      position: relative; z-index: 2;
+      text-align: center;
+      max-width: 760px; margin-inline: auto;
+    }
+
+    /* Eyebrow badge */
+    .pill {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: .75rem; font-weight: 700;
+      letter-spacing: .05em; text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-light);
+      border: 1px solid var(--accent-ring);
+      border-radius: 100px;
+      padding: 5px 13px;
+      margin-bottom: 1.5rem;
+    }
+    .pill__dot {
+      width: 6px; height: 6px;
+      background: var(--accent); border-radius: 50%;
+      animation: blink 2.4s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%,100% { opacity: 1; }
+      50%      { opacity: .35; }
+    }
+
+    .hero__h1 {
+      font-size: clamp(2.75rem, 7vw, 5rem);
+      font-weight: 900; line-height: 1.06;
+      letter-spacing: -.04em; margin-bottom: 1.25rem;
+    }
+
+    .gradient-text {
+      background: linear-gradient(120deg, #2563eb 10%, #7c3aed 55%, #0891b2 90%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero__sub {
+      font-size: clamp(1rem, 2.2vw, 1.2rem);
+      color: var(--text-3); max-width: 540px;
+      margin-inline: auto; margin-bottom: 2.5rem;
+      line-height: 1.75;
+    }
+
+    .hero__ctas {
+      display: flex; align-items: center; justify-content: center;
+      gap: 10px; flex-wrap: wrap;
+    }
+
+    /* ════════════════════════════════════════
+       STATS BAR
+    ════════════════════════════════════════ */
+    .stats-bar {
+      background: var(--bg-2);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 1.75rem 0;
+    }
+    .stats-bar__grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      text-align: center;
+    }
+    @media (max-width: 540px) {
+      .stats-bar__grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .stat {
+      padding: .5rem;
+      border-right: 1px solid var(--border);
+    }
+    .stat:last-child { border-right: none; }
+    @media (max-width: 540px) {
+      .stat:nth-child(2) { border-right: none; }
+    }
+
+    .stat__num {
+      font-size: 1.875rem; font-weight: 900;
+      color: var(--text-1); letter-spacing: -.04em;
+      line-height: 1; margin-bottom: 3px;
+    }
+    .stat__lbl {
+      font-size: .8rem; font-weight: 500; color: var(--text-4);
+    }
+
+    /* ════════════════════════════════════════
+       SHARED SECTION CHROME
+    ════════════════════════════════════════ */
+    .section { padding: clamp(3rem, 7vw, 5.5rem) 0; }
+    .section--muted { background: var(--bg-2); }
+
+    .section-hd { margin-bottom: 2.75rem; }
+    .section-hd--center {
+      text-align: center;
+      max-width: 580px; margin-inline: auto; margin-bottom: 3rem;
+    }
+    .section-hd__row {
+      display: flex; align-items: flex-end;
+      justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+      margin-bottom: 2.75rem;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      font-size: .72rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: .6rem;
+    }
+
+    .section-title {
+      font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+      font-weight: 800; letter-spacing: -.035em;
+      color: var(--text-1); line-height: 1.14;
+      margin-bottom: .625rem;
+    }
+    .section-sub {
+      font-size: 1rem; color: var(--text-3); line-height: 1.75;
+    }
+
+    /* ════════════════════════════════════════
+       FEATURE PILLARS
+    ════════════════════════════════════════ */
+    .pillars {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+    }
+    @media (max-width: 860px) { .pillars { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 540px) { .pillars { grid-template-columns: 1fr; } }
+
+    .pillar {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 1.75rem;
+      position: relative; overflow: hidden;
+      transition: box-shadow .2s, transform .2s, border-color .2s;
+    }
+    .pillar::after {
+      content: '';
+      position: absolute; inset: 0; border-radius: inherit;
+      opacity: 0; transition: opacity .2s;
+    }
+    .pillar--blue::after  { background: linear-gradient(135deg, rgba(37,99,235,.04),  transparent); }
+    .pillar--green::after { background: linear-gradient(135deg, rgba(5,150,105,.04),   transparent); }
+    .pillar--purple::after{ background: linear-gradient(135deg, rgba(124,58,237,.04),  transparent); }
+    .pillar:hover {
+      border-color: var(--border-2);
+      box-shadow: var(--sh-lg);
+      transform: translateY(-3px);
+    }
+    .pillar:hover::after { opacity: 1; }
+
+    .pillar__icon {
+      width: 46px; height: 46px; border-radius: var(--r-md);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 1.125rem;
+    }
+    .pillar__icon--blue   { background: var(--accent-light); color: var(--accent); }
+    .pillar__icon--green  { background: var(--green-light);  color: var(--green); }
+    .pillar__icon--purple { background: var(--purple-light); color: var(--purple); }
+
+    .pillar__title {
+      font-size: 1.05rem; font-weight: 700;
+      color: var(--text-1); letter-spacing: -.02em;
+      margin-bottom: .4rem;
+    }
+    .pillar__desc {
+      font-size: .9rem; color: var(--text-3);
+      line-height: 1.65; margin-bottom: 1.375rem;
+    }
+    .pillar__link {
+      font-size: .85rem; font-weight: 600; color: var(--accent);
+      display: inline-flex; align-items: center; gap: 5px;
+      transition: gap .15s;
+    }
+    .pillar__link:hover { gap: 9px; }
+
+    /* ════════════════════════════════════════
+       RESOURCE CARDS
+    ════════════════════════════════════════ */
+    .resources-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.125rem;
+    }
+    @media (max-width: 700px) { .resources-grid { grid-template-columns: 1fr; } }
+
+    .res-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 1.375rem 1.5rem;
+      display: flex; flex-direction: column; gap: .75rem;
+      transition: box-shadow .2s, transform .2s, border-color .2s;
+      cursor: pointer;
+    }
+    .res-card:hover {
+      border-color: var(--border-2);
+      box-shadow: var(--sh-md);
+      transform: translateY(-2px);
+    }
+
+    .res-card__top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+
+    .type-badge {
+      display: inline-flex; align-items: center;
+      font-size: .68rem; font-weight: 700;
+      letter-spacing: .04em; text-transform: uppercase;
+      padding: 3px 9px; border-radius: 4px;
+    }
+    .type-badge--comparison { background: var(--orange-light); color: var(--orange); }
+    .type-badge--tutorial   { background: var(--accent-light); color: var(--accent); }
+    .type-badge--guide      { background: var(--green-light);  color: var(--green); }
+    .type-badge--news       { background: var(--purple-light); color: var(--purple); }
+
+    .res-card__date { font-size: .75rem; color: var(--text-4); white-space: nowrap; }
+
+    .res-card__title {
+      font-size: .975rem; font-weight: 700;
+      color: var(--text-1); letter-spacing: -.02em; line-height: 1.4;
+    }
+    .res-card__excerpt {
+      font-size: .875rem; color: var(--text-3); line-height: 1.65;
+      display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .res-card__tags { display: flex; flex-wrap: wrap; gap: 5px; }
+
+    .tag {
+      font-size: .72rem; font-weight: 500;
+      color: var(--text-4); background: var(--bg-3);
+      padding: 2px 8px; border-radius: 4px;
+    }
+
+    /* ════════════════════════════════════════
+       ECOSYSTEM
+    ════════════════════════════════════════ */
+    .eco-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: .875rem;
+    }
+
+    .eco-item {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 7px; padding: 1.125rem .75rem;
+      border: 1px solid var(--border); border-radius: var(--r-lg);
+      background: var(--bg);
+      transition: border-color .2s, box-shadow .2s, transform .2s;
+    }
+    .eco-item:hover {
+      border-color: var(--border-2);
+      box-shadow: var(--sh-sm); transform: translateY(-2px);
+    }
+
+    .eco-item__chip {
+      width: 42px; height: 42px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono); font-size: .62rem; font-weight: 500;
+      letter-spacing: .01em; line-height: 1;
+    }
+    .eco-item__name { font-size: .75rem; font-weight: 600; color: var(--text-2); text-align: center; }
+
+    /* per-brand colours */
+    .ec-aws    .eco-item__chip { background: #fff3e0; color: #c45000; }
+    .ec-azure  .eco-item__chip { background: #e3f2fd; color: #0277bd; }
+    .ec-gcp    .eco-item__chip { background: #e8f5e9; color: #2e7d32; }
+    .ec-k8s    .eco-item__chip { background: #e8eaf6; color: #3949ab; }
+    .ec-tf     .eco-item__chip { background: #f3e5f5; color: #6a1b9a; }
+    .ec-pulumi .eco-item__chip { background: #fce4ec; color: #c62828; }
+    .ec-docker .eco-item__chip { background: #e1f5fe; color: #0288d1; }
+    .ec-argo   .eco-item__chip { background: #fff8e1; color: #f57f17; }
+    .ec-gha    .eco-item__chip { background: #f5f5f5; color: #212121; }
+    .ec-ansible .eco-item__chip { background: #ffebee; color: #b71c1c; }
+    .ec-linux  .eco-item__chip { background: #fafafa; color: #424242; }
+    .ec-cf     .eco-item__chip { background: #fff3e0; color: #e65100; }
+
+    /* ════════════════════════════════════════
+       NEWSLETTER
+    ════════════════════════════════════════ */
+    .newsletter {
+      background: var(--text-1);
+      padding: clamp(3rem, 7vw, 5.5rem) 0;
+    }
+    .newsletter__body {
+      max-width: 520px; margin-inline: auto; text-align: center;
+    }
+    .newsletter__icon {
+      width: 52px; height: 52px;
+      background: rgba(255,255,255,.1); border-radius: var(--r-lg);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 1.5rem; color: #fff;
+    }
+    .newsletter__title {
+      font-size: clamp(1.5rem, 3.5vw, 2.25rem);
+      font-weight: 800; letter-spacing: -.035em;
+      color: #fff; margin-bottom: .625rem; line-height: 1.2;
+    }
+    .newsletter__sub {
+      font-size: .975rem; color: rgba(255,255,255,.55);
+      line-height: 1.75; margin-bottom: 2rem;
+    }
+    .newsletter__form {
+      display: flex; gap: 8px; max-width: 420px; margin-inline: auto;
+    }
+    @media (max-width: 480px) { .newsletter__form { flex-direction: column; } }
+
+    .newsletter__input {
+      flex: 1; min-width: 0;
+      background: rgba(255,255,255,.09); color: #fff;
+      border: 1px solid rgba(255,255,255,.14); border-radius: var(--r-md);
+      font-family: var(--font); font-size: .9rem;
+      padding: 10px 15px; outline: none;
+      transition: border-color .15s;
+    }
+    .newsletter__input::placeholder { color: rgba(255,255,255,.3); }
+    .newsletter__input:focus { border-color: rgba(255,255,255,.38); }
+
+    .newsletter__note {
+      font-size: .73rem; color: rgba(255,255,255,.3);
+      margin-top: .875rem;
+    }
+
+    /* ════════════════════════════════════════
+       FOOTER
+    ════════════════════════════════════════ */
+    .footer {
+      background: var(--bg-2);
+      border-top: 1px solid var(--border);
+      padding: 3rem 0 1.75rem;
+    }
+    .footer__grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 2rem 3rem;
+      margin-bottom: 2.5rem;
+    }
+    @media (max-width: 760px) { .footer__grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 440px) { .footer__grid { grid-template-columns: 1fr; } }
+
+    .footer__brand-desc {
+      font-size: .85rem; color: var(--text-3);
+      line-height: 1.7; margin-top: .75rem; max-width: 260px;
+    }
+    .footer__col-title {
+      font-size: .72rem; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase;
+      color: var(--text-2); margin-bottom: .875rem;
+    }
+    .footer__links { list-style: none; display: flex; flex-direction: column; gap: .5rem; }
+    .footer__links a { font-size: .85rem; color: var(--text-3); transition: color .15s; }
+    .footer__links a:hover { color: var(--text-1); }
+
+    .footer__bottom {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 1.5rem; border-top: 1px solid var(--border);
+      gap: 1rem; flex-wrap: wrap;
+    }
+    .footer__copy { font-size: .78rem; color: var(--text-4); }
+    .footer__legal { display: flex; gap: 1.25rem; }
+    .footer__legal a { font-size: .78rem; color: var(--text-4); transition: color .15s; }
+    .footer__legal a:hover { color: var(--text-2); }
+
+    /* ════════════════════════════════════════
+       SCROLL REVEAL
+    ════════════════════════════════════════ */
+    .reveal {
+      opacity: 0; transform: translateY(18px);
+      transition: opacity .5s ease, transform .5s ease;
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+    .reveal-d1 { transition-delay: .08s; }
+    .reveal-d2 { transition-delay: .16s; }
+    .reveal-d3 { transition-delay: .24s; }
+    .reveal-d4 { transition-delay: .32s; }
+
+    /* respect user motion preference */
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { opacity: 1; transform: none; transition: none; }
+      .pill__dot { animation: none; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ══════════ NAV ══════════ -->
+  <header>
+    <nav class="nav" id="nav" role="navigation" aria-label="Main navigation">
+      <div class="container nav__inner">
+
+        <a href="/" class="nav__logo" aria-label="Cloudista — home">
+          <div class="nav__logo-mark" aria-hidden="true">
+            <!-- cloud icon -->
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+            </svg>
+          </div>
+          Cloudista
+        </a>
+
+        <ul class="nav__links" role="list">
+          <li><a href="#tutorials">Tutorials</a></li>
+          <li><a href="#comparisons">Comparisons</a></li>
+          <li><a href="#news">News</a></li>
+          <li><a href="#ecosystem">Ecosystem</a></li>
+        </ul>
+
+        <div class="nav__actions">
+          <a href="#newsletter" class="btn btn-primary">Subscribe Free</a>
+          <button class="nav__hamburger" aria-label="Open menu" aria-expanded="false">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="3" y1="6"  x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+      </div>
+    </nav>
+  </header>
+
+  <main>
+
+    <!-- ══════════ HERO ══════════ -->
+    <section class="hero" aria-labelledby="hero-h1">
+      <div class="hero__orb hero__orb-1" aria-hidden="true"></div>
+      <div class="hero__orb hero__orb-2" aria-hidden="true"></div>
+
+      <div class="container">
+        <div class="hero__body">
+
+          <div class="pill" aria-hidden="true">
+            <span class="pill__dot"></span>
+            Built for Cloud Engineers
+          </div>
+
+          <h1 class="hero__h1" id="hero-h1">
+            Master the Cloud.<br>
+            <span class="gradient-text">Ship Faster.</span>
+          </h1>
+
+          <p class="hero__sub">
+            Cloudista is your all-in-one resource for cloud tutorials,
+            head-to-head tool comparisons, and daily news across AWS, Azure,
+            GCP, and the entire cloud-native ecosystem.
+          </p>
+
+          <div class="hero__ctas">
+            <a href="#tutorials" class="btn btn-primary btn-lg">
+              Browse Tutorials
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2.5"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </a>
+            <a href="#comparisons" class="btn btn-ghost btn-lg">View Comparisons</a>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ STATS BAR ══════════ -->
+    <div class="stats-bar" role="region" aria-label="Site statistics">
+      <div class="container">
+        <div class="stats-bar__grid">
+          <div class="stat">
+            <div class="stat__num">100+</div>
+            <div class="stat__lbl">Tutorials & Guides</div>
+          </div>
+          <div class="stat">
+            <div class="stat__num">50+</div>
+            <div class="stat__lbl">Tool Comparisons</div>
+          </div>
+          <div class="stat">
+            <div class="stat__num">Daily</div>
+            <div class="stat__lbl">News Updates</div>
+          </div>
+          <div class="stat">
+            <div class="stat__num">5+</div>
+            <div class="stat__lbl">Cloud Providers</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ FEATURE PILLARS ══════════ -->
+    <section class="section" id="tutorials" aria-labelledby="pillars-title">
+      <div class="container">
+
+        <div class="section-hd--center reveal">
+          <span class="eyebrow">What We Cover</span>
+          <h2 class="section-title" id="pillars-title">
+            Everything you need to<br>navigate the cloud
+          </h2>
+          <p class="section-sub">
+            From beginner walkthroughs to advanced production patterns —
+            we cover the full cloud spectrum so you can learn faster and build better.
+          </p>
+        </div>
+
+        <div class="pillars">
+
+          <div class="pillar pillar--blue reveal reveal-d1">
+            <div class="pillar__icon pillar__icon--blue" aria-hidden="true">
+              <!-- document icon -->
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </div>
+            <h3 class="pillar__title">Tutorials & Guides</h3>
+            <p class="pillar__desc">
+              Step-by-step walkthroughs for deploying, configuring, and
+              scaling cloud infrastructure. From first VPC to multi-region
+              high-availability setups.
+            </p>
+            <a href="#" class="pillar__link">
+              Browse tutorials
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2.5"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </a>
+          </div>
+
+          <div class="pillar pillar--green reveal reveal-d2" id="comparisons">
+            <div class="pillar__icon pillar__icon--green" aria-hidden="true">
+              <!-- bar-chart icon -->
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"/>
+                <line x1="12" y1="20" x2="12" y2="4"/>
+                <line x1="6"  y1="20" x2="6"  y2="14"/>
+              </svg>
+            </div>
+            <h3 class="pillar__title">Tool Comparisons</h3>
+            <p class="pillar__desc">
+              Honest, in-depth comparisons of cloud services and DevOps
+              tools. Cut through the marketing noise and pick the right
+              solution for your stack.
+            </p>
+            <a href="#" class="pillar__link">
+              View comparisons
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2.5"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </a>
+          </div>
+
+          <div class="pillar pillar--purple reveal reveal-d3" id="news">
+            <div class="pillar__icon pillar__icon--purple" aria-hidden="true">
+              <!-- newspaper icon -->
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a4 4 0 0 1-4 4z"/>
+                <line x1="10" y1="10" x2="16" y2="10"/>
+                <line x1="10" y1="14" x2="16" y2="14"/>
+                <line x1="10" y1="18" x2="13" y2="18"/>
+              </svg>
+            </div>
+            <h3 class="pillar__title">News & Updates</h3>
+            <p class="pillar__desc">
+              Stay current with the cloud industry. Daily summaries of
+              service announcements, pricing changes, and engineering
+              deep-dives worth reading.
+            </p>
+            <a href="#" class="pillar__link">
+              Read latest news
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2.5"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </a>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ FEATURED RESOURCES ══════════ -->
+    <section class="section section--muted" aria-labelledby="resources-title">
+      <div class="container">
+
+        <div class="section-hd__row reveal">
+          <div>
+            <span class="eyebrow">Featured</span>
+            <h2 class="section-title" id="resources-title">Latest from Cloudista</h2>
+          </div>
+          <a href="#" class="btn btn-ghost">View all resources</a>
+        </div>
+
+        <div class="resources-grid">
+
+          <article class="res-card reveal reveal-d1">
+            <div class="res-card__top">
+              <span class="type-badge type-badge--comparison">Comparison</span>
+              <span class="res-card__date">Feb 20</span>
+            </div>
+            <h3 class="res-card__title">
+              Kubernetes vs Amazon ECS: The Full 2026 Comparison
+            </h3>
+            <p class="res-card__excerpt">
+              Which container orchestrator is right for your team? We break down
+              cost, complexity, scalability, and ecosystem across both platforms.
+            </p>
+            <div class="res-card__tags">
+              <span class="tag">Kubernetes</span>
+              <span class="tag">ECS</span>
+              <span class="tag">AWS</span>
+            </div>
+          </article>
+
+          <article class="res-card reveal reveal-d2">
+            <div class="res-card__top">
+              <span class="type-badge type-badge--tutorial">Tutorial</span>
+              <span class="res-card__date">Feb 18</span>
+            </div>
+            <h3 class="res-card__title">
+              Multi-Region AWS Deployments with Route 53 and ALB
+            </h3>
+            <p class="res-card__excerpt">
+              A practical guide to active-active multi-region architectures using
+              Route 53 latency-based routing and Application Load Balancers.
+            </p>
+            <div class="res-card__tags">
+              <span class="tag">AWS</span>
+              <span class="tag">Route 53</span>
+              <span class="tag">ALB</span>
+            </div>
+          </article>
+
+          <article class="res-card reveal reveal-d1">
+            <div class="res-card__top">
+              <span class="type-badge type-badge--comparison">Comparison</span>
+              <span class="res-card__date">Feb 15</span>
+            </div>
+            <h3 class="res-card__title">
+              Terraform vs Pulumi in 2026: Which IaC Tool Wins?
+            </h3>
+            <p class="res-card__excerpt">
+              State management, multi-cloud support, team workflows, and ecosystem
+              integrations — we tested both and have a verdict.
+            </p>
+            <div class="res-card__tags">
+              <span class="tag">Terraform</span>
+              <span class="tag">Pulumi</span>
+              <span class="tag">IaC</span>
+            </div>
+          </article>
+
+          <article class="res-card reveal reveal-d2">
+            <div class="res-card__top">
+              <span class="type-badge type-badge--guide">Guide</span>
+              <span class="res-card__date">Feb 12</span>
+            </div>
+            <h3 class="res-card__title">
+              GCP Cloud Run Deep Dive: Serverless Containers at Scale
+            </h3>
+            <p class="res-card__excerpt">
+              Everything you need to run stateless containers on GCP Cloud Run —
+              cold starts, VPC connectivity, concurrency tuning, and cost controls.
+            </p>
+            <div class="res-card__tags">
+              <span class="tag">GCP</span>
+              <span class="tag">Cloud Run</span>
+              <span class="tag">Serverless</span>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ ECOSYSTEM ══════════ -->
+    <section class="section" id="ecosystem" aria-labelledby="eco-title">
+      <div class="container">
+
+        <div class="section-hd--center reveal">
+          <span class="eyebrow">Ecosystem</span>
+          <h2 class="section-title" id="eco-title">We cover the full cloud stack</h2>
+          <p class="section-sub">
+            From major providers to the tools that power modern platform engineering.
+          </p>
+        </div>
+
+        <div class="eco-grid">
+
+          <div class="eco-item ec-aws reveal">
+            <div class="eco-item__chip" aria-hidden="true">AWS</div>
+            <span class="eco-item__name">Amazon Web&nbsp;Services</span>
+          </div>
+          <div class="eco-item ec-azure reveal reveal-d1">
+            <div class="eco-item__chip" aria-hidden="true">AZ</div>
+            <span class="eco-item__name">Microsoft&nbsp;Azure</span>
+          </div>
+          <div class="eco-item ec-gcp reveal reveal-d2">
+            <div class="eco-item__chip" aria-hidden="true">GCP</div>
+            <span class="eco-item__name">Google&nbsp;Cloud</span>
+          </div>
+          <div class="eco-item ec-k8s reveal reveal-d3">
+            <div class="eco-item__chip" aria-hidden="true">K8S</div>
+            <span class="eco-item__name">Kubernetes</span>
+          </div>
+          <div class="eco-item ec-tf reveal reveal-d4">
+            <div class="eco-item__chip" aria-hidden="true">TF</div>
+            <span class="eco-item__name">Terraform</span>
+          </div>
+          <div class="eco-item ec-pulumi reveal">
+            <div class="eco-item__chip" aria-hidden="true">PU</div>
+            <span class="eco-item__name">Pulumi</span>
+          </div>
+          <div class="eco-item ec-docker reveal reveal-d1">
+            <div class="eco-item__chip" aria-hidden="true">DO</div>
+            <span class="eco-item__name">Docker</span>
+          </div>
+          <div class="eco-item ec-argo reveal reveal-d2">
+            <div class="eco-item__chip" aria-hidden="true">CD</div>
+            <span class="eco-item__name">Argo&nbsp;CD</span>
+          </div>
+          <div class="eco-item ec-gha reveal reveal-d3">
+            <div class="eco-item__chip" aria-hidden="true">GHA</div>
+            <span class="eco-item__name">GitHub&nbsp;Actions</span>
+          </div>
+          <div class="eco-item ec-ansible reveal reveal-d4">
+            <div class="eco-item__chip" aria-hidden="true">ANS</div>
+            <span class="eco-item__name">Ansible</span>
+          </div>
+          <div class="eco-item ec-linux reveal">
+            <div class="eco-item__chip" aria-hidden="true">LNX</div>
+            <span class="eco-item__name">Linux</span>
+          </div>
+          <div class="eco-item ec-cf reveal reveal-d1">
+            <div class="eco-item__chip" aria-hidden="true">CF</div>
+            <span class="eco-item__name">Cloudflare</span>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ NEWSLETTER ══════════ -->
+    <section class="newsletter" id="newsletter" aria-labelledby="nl-title">
+      <div class="container">
+        <div class="newsletter__body">
+
+          <div class="newsletter__icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+              <polyline points="22,6 12,13 2,6"/>
+            </svg>
+          </div>
+
+          <h2 class="newsletter__title" id="nl-title">Stay ahead of the cloud</h2>
+          <p class="newsletter__sub">
+            Get the best tutorials, comparisons, and cloud news delivered
+            to your inbox weekly. No fluff — just signal.
+          </p>
+
+          <form class="newsletter__form" id="nl-form" novalidate>
+            <label for="nl-email" class="sr-only">Email address</label>
+            <input
+              type="email"
+              id="nl-email"
+              class="newsletter__input"
+              placeholder="you@company.com"
+              required
+              autocomplete="email"
+            >
+            <button type="submit" class="btn btn-primary" id="nl-btn">Subscribe</button>
+          </form>
+
+          <p class="newsletter__note">No spam. Unsubscribe anytime.</p>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ══════════ FOOTER ══════════ -->
+  <footer class="footer" role="contentinfo">
+    <div class="container">
+
+      <div class="footer__grid">
+
+        <div>
+          <a href="/" class="nav__logo" aria-label="Cloudista — home">
+            <div class="nav__logo-mark" aria-hidden="true">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+              </svg>
+            </div>
+            Cloudista
+          </a>
+          <p class="footer__brand-desc">
+            Your all-in-one resource for cloud tutorials, tool comparisons,
+            and industry news. Built for DevOps and platform engineers.
+          </p>
+        </div>
+
+        <div>
+          <h3 class="footer__col-title">Learn</h3>
+          <ul class="footer__links">
+            <li><a href="#">Tutorials</a></li>
+            <li><a href="#">Guides</a></li>
+            <li><a href="#">Cheatsheets</a></li>
+            <li><a href="#">Videos</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 class="footer__col-title">Compare</h3>
+          <ul class="footer__links">
+            <li><a href="#">Cloud Providers</a></li>
+            <li><a href="#">IaC Tools</a></li>
+            <li><a href="#">Container Platforms</a></li>
+            <li><a href="#">CI/CD Tools</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 class="footer__col-title">Company</h3>
+          <ul class="footer__links">
+            <li><a href="#">About</a></li>
+            <li><a href="#">Newsletter</a></li>
+            <li><a href="#">RSS Feed</a></li>
+            <li><a href="#">Contact</a></li>
+          </ul>
+        </div>
+
+      </div>
+
+      <div class="footer__bottom">
+        <p class="footer__copy">© 2026 Cloudista. All rights reserved.</p>
+        <div class="footer__legal">
+          <a href="#">Privacy</a>
+          <a href="#">Terms</a>
+        </div>
+      </div>
+
+    </div>
+  </footer>
+
+  <script>
+    'use strict';
+
+    // ── Scroll-reveal via IntersectionObserver ──────────────────────────
+    const revealEls = document.querySelectorAll('.reveal');
+    const revealObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -48px 0px' }
+    );
+    revealEls.forEach((el) => revealObserver.observe(el));
+
+    // ── Sticky nav shadow on scroll ─────────────────────────────────────
+    const nav = document.getElementById('nav');
+    const onScroll = () => {
+      nav.classList.toggle('nav--scrolled', window.scrollY > 8);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    // ── Newsletter form ─────────────────────────────────────────────────
+    const nlForm  = document.getElementById('nl-form');
+    const nlBtn   = document.getElementById('nl-btn');
+    const nlInput = document.getElementById('nl-email');
+
+    nlForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!nlInput.value || !nlInput.checkValidity()) return;
+
+      // Optimistic UI
+      nlBtn.textContent    = 'Subscribed ✓';
+      nlBtn.style.background = '#059669';
+      nlBtn.style.borderColor = '#059669';
+      nlBtn.disabled       = true;
+      nlInput.value        = '';
+      nlInput.placeholder  = 'Thanks! Check your inbox.';
+
+      // Reset after 5 s
+      setTimeout(() => {
+        nlBtn.textContent     = 'Subscribe';
+        nlBtn.style.background = '';
+        nlBtn.style.borderColor = '';
+        nlBtn.disabled        = false;
+        nlInput.placeholder   = 'you@company.com';
+      }, 5000);
+    });
+
+    // ── Resource card keyboard / click navigation ───────────────────────
+    document.querySelectorAll('.res-card').forEach((card) => {
+      card.setAttribute('tabindex', '0');
+      card.setAttribute('role', 'link');
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') card.click();
+      });
+    });
+  </script>
+
+</body>
+</html>
