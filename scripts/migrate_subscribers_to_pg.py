@@ -47,23 +47,31 @@ def main() -> None:
         pg_conn.close()
         return
 
+    # Pending rows from MySQL have no expiry context — mark their tokens as already
+    # expired so the confirm endpoint redirects to ?confirmed=expired rather than
+    # silently confirming a stale token. Confirmed/unsubscribed rows are unaffected.
+    for row in rows:
+        row["token_expires_at"] = row["created_at"] if row["status"] == "pending" else None
+
     with pg_conn.cursor() as dst:
         psycopg2.extras.execute_batch(
             dst,
             """
             INSERT INTO subscribers
-                (email, status, source, token, ip_address, user_agent,
+                (email, status, source, token, token_expires_at, ip_address, user_agent,
                  created_at, confirmed_at, unsubscribed_at)
             VALUES
-                (%(email)s, %(status)s, %(source)s, %(token)s, %(ip_address)s,
-                 %(user_agent)s, %(created_at)s, %(confirmed_at)s, %(unsubscribed_at)s)
+                (%(email)s, %(status)s, %(source)s, %(token)s, %(token_expires_at)s,
+                 %(ip_address)s, %(user_agent)s, %(created_at)s, %(confirmed_at)s,
+                 %(unsubscribed_at)s)
             ON CONFLICT (email) DO NOTHING
             """,
             rows,
         )
     pg_conn.commit()
 
-    print(f"Migration complete — {dst.rowcount} rows inserted ({len(rows) - dst.rowcount} duplicates skipped).")
+    print(f"Migration complete — attempted {len(rows)} rows (duplicates skipped via ON CONFLICT DO NOTHING).")
+    print("Pending rows have token_expires_at=created_at (immediately expired) — they must re-subscribe to confirm.")
     mysql_conn.close()
     pg_conn.close()
 
