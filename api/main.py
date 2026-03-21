@@ -1,11 +1,14 @@
 """
 Cloudista API
 -------------
-POST /api/subscribe        – register an email; sends a verification email via SES
-GET  /api/confirm/{token}  – confirm subscription; redirects to site with status param
-GET  /api/health           – liveness probe (validates DB connectivity)
+POST /api/subscribe              – register an email; sends a verification email via SES
+GET  /api/confirm/{token}        – confirm subscription; redirects to site with status param
+GET  /api/unsubscribe/{token}    – unsubscribe; redirects to site with status param
+POST /api/ses-webhook            – SNS bounce/complaint handler (internal; not in docs)
+GET  /api/health                 – liveness probe (validates DB connectivity)
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -13,12 +16,11 @@ import urllib.parse
 import urllib.request
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+import asyncpg
 import boto3
-import psycopg2
-import psycopg2.errors
 from blog_routes import html_router as blog_html_router
 from blog_routes import router as blog_router
 from botocore.exceptions import BotoCoreError, ClientError
@@ -28,8 +30,9 @@ from email_template import build_verification_email
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
-from psycopg2.extensions import connection as PgConn
 from schemas import HealthOut, MessageOut, SubscribeIn
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -39,6 +42,11 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
 )
 log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+_TOKEN_TTL = timedelta(hours=72)
 
 
 # ---------------------------------------------------------------------------
@@ -51,19 +59,36 @@ class TurnstileResult(Enum):
 
 
 # ---------------------------------------------------------------------------
+# Rate limiter (keyed by real client IP)
+# ---------------------------------------------------------------------------
+def _real_ip(request: Request) -> str:
+    return (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
+
+
+limiter = Limiter(key_func=_real_ip)
+
+
+# ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_pool()
+    await init_pool()
     yield
-    close_pool()
+    await close_pool()
 
 
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
 app = FastAPI(title="Cloudista API", docs_url=None, redoc_url=None, lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.include_router(blog_router)
 app.include_router(blog_html_router)
@@ -84,6 +109,18 @@ _ses = boto3.client("ses", region_name=settings.aws_region)
 
 
 # ---------------------------------------------------------------------------
+# Request-ID middleware
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = req_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = req_id
+    return response
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -92,20 +129,11 @@ def _make_token(email: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def _real_ip(request: Request) -> str | None:
-    return (
-        request.headers.get("CF-Connecting-IP")
-        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or (request.client.host if request.client else None)
-    )
-
-
-def _verify_turnstile(token: str, ip: str | None) -> TurnstileResult:
-    """Verify a Cloudflare Turnstile token. Returns TurnstileResult enum."""
+def _verify_turnstile_sync(token: str, ip: str) -> TurnstileResult:
     payload = urllib.parse.urlencode({
         "secret": settings.turnstile_secret,
         "response": token,
-        **({"remoteip": ip} if ip else {}),
+        "remoteip": ip,
     }).encode()
     try:
         with urllib.request.urlopen(
@@ -120,13 +148,18 @@ def _verify_turnstile(token: str, ip: str | None) -> TurnstileResult:
         return TurnstileResult.UNAVAILABLE
 
 
+async def _verify_turnstile(token: str, ip: str) -> TurnstileResult:
+    return await asyncio.to_thread(_verify_turnstile_sync, token, ip)
+
+
 def _send_verification(email: str, token: str) -> None:
     """
     Send a verification email via AWS SES.
     Raises on failure so the caller can decide whether to propagate.
     """
     confirm_url = f"{settings.confirm_base_url}/{token}"
-    subject, html, text = build_verification_email(confirm_url)
+    unsubscribe_url = f"{settings.site_url}/api/unsubscribe/{token}"
+    subject, html, text = build_verification_email(confirm_url, unsubscribe_url)
 
     _ses.send_email(
         Source=settings.from_email,
@@ -142,10 +175,10 @@ def _send_verification(email: str, token: str) -> None:
     log.info("Verification email sent → %s", email)
 
 
-def _try_send_verification(email: str, token: str) -> None:
+async def _try_send_verification(email: str, token: str) -> None:
     """Send verification email; log but don't raise on SES failure."""
     try:
-        _send_verification(email, token)
+        await asyncio.to_thread(_send_verification, email, token)
     except (BotoCoreError, ClientError) as exc:
         log.error("SES send failed for %s: %s", email, exc)
 
@@ -155,7 +188,7 @@ def _try_send_verification(email: str, token: str) -> None:
 # ---------------------------------------------------------------------------
 
 @app.get("/api/health", response_model=HealthOut)
-def health():
+async def health():
     """Liveness probe. Always returns 200; DB connectivity reported in body."""
     from dependencies import _pg_pool  # noqa: PLC0415 — intentional late import to avoid circular
 
@@ -165,18 +198,13 @@ def health():
         db_ok = False
         db_error = "Pool not initialised"
     else:
-        conn = None
         try:
-            conn = _pg_pool.getconn()
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
+            async with _pg_pool.acquire(timeout=2.0) as conn:
+                await conn.fetchval("SELECT 1")
         except Exception as exc:
             log.warning("DB ping failed: %s", exc)
             db_ok = False
-            db_error = str(exc)
-        finally:
-            if conn is not None:
-                _pg_pool.putconn(conn)
+            db_error = "Connection failed"  # don't leak internal details
     return HealthOut(
         status="ok",
         db="ok" if db_ok else "unavailable",
@@ -185,7 +213,12 @@ def health():
 
 
 @app.post("/api/subscribe", response_model=MessageOut)
-def subscribe(body: SubscribeIn, request: Request, conn: PgConn = Depends(get_pg_conn)):
+@limiter.limit("5/minute")
+async def subscribe(
+    request: Request,
+    body: SubscribeIn,
+    conn: asyncpg.Connection = Depends(get_pg_conn),
+):
     """
     Register an email address for launch notifications.
 
@@ -196,95 +229,204 @@ def subscribe(body: SubscribeIn, request: Request, conn: PgConn = Depends(get_pg
     """
     ip = _real_ip(request)
     ua = request.headers.get("User-Agent", "")[:500]
-    token = _make_token(body.email)
 
     if body.cf_turnstile_token:
         if not settings.turnstile_secret:
             log.warning("Turnstile token received but TURNSTILE_SECRET not configured — skipping")
         else:
-            result = _verify_turnstile(body.cf_turnstile_token, ip)
+            result = await _verify_turnstile(body.cf_turnstile_token, ip)
             if result is TurnstileResult.INVALID:
                 raise HTTPException(status_code=400, detail="CAPTCHA verification failed.")
 
+    new_token: str | None = None
+    resend_token: str | None = None
+    resend_msg: str = ""
+
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, status, token FROM subscribers WHERE email = %s LIMIT 1",
-                (body.email,),
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT id, status, token, token_expires_at FROM subscribers WHERE email = $1 LIMIT 1",
+                body.email,
             )
-            row = cur.fetchone()
 
             if row:
                 if row["status"] == "confirmed":
                     return JSONResponse(status_code=200, content={"message": "Already confirmed."})
+
                 if row["status"] == "unsubscribed":
-                    cur.execute(
-                        "UPDATE subscribers SET status='pending', token=%s WHERE id=%s",
-                        (token, row["id"]),
+                    t = _make_token(body.email)
+                    await conn.execute(
+                        "UPDATE subscribers SET status='pending', token=$1, token_expires_at=$2 WHERE id=$3",
+                        t,
+                        datetime.now(timezone.utc) + _TOKEN_TTL,
+                        row["id"],
                     )
-                    conn.commit()
-                    _try_send_verification(body.email, token)
-                    return JSONResponse(
-                        status_code=200,
-                        content={"message": "Re-subscribed — check your email."},
+                    resend_token = t
+                    resend_msg = "Re-subscribed — check your email."
+                else:
+                    # pending — always rotate token on resend so old links are invalidated
+                    t = _make_token(body.email)
+                    await conn.execute(
+                        "UPDATE subscribers SET token=$1, token_expires_at=$2 WHERE id=$3",
+                        t,
+                        datetime.now(timezone.utc) + _TOKEN_TTL,
+                        row["id"],
                     )
-                # pending — resend
-                _try_send_verification(body.email, row["token"])
-                return JSONResponse(
-                    status_code=200,
-                    content={"message": "Confirmation email resent."},
+                    resend_token = t
+                    resend_msg = "Confirmation email resent."
+            else:
+                t = _make_token(body.email)
+                await conn.execute(
+                    """INSERT INTO subscribers (email, source, token, token_expires_at, ip_address, user_agent)
+                       VALUES ($1, $2, $3, $4, $5, $6)""",
+                    body.email,
+                    body.source,
+                    t,
+                    datetime.now(timezone.utc) + _TOKEN_TTL,
+                    ip,
+                    ua,
                 )
+                new_token = t
 
-            cur.execute(
-                """INSERT INTO subscribers (email, source, token, ip_address, user_agent)
-                   VALUES (%s, %s, %s, %s, %s)""",
-                (body.email, body.source, token, ip, ua),
-            )
-            conn.commit()
-        _try_send_verification(body.email, token)
-        return JSONResponse(
-            status_code=201,
-            content={"message": "Check your email to confirm."},
-        )
-
-    except psycopg2.errors.UniqueViolation as exc:
-        conn.rollback()
-        constraint = getattr(getattr(exc, "diag", None), "constraint_name", None)
-        if constraint and "token" in constraint:
+    except asyncpg.UniqueViolationError as exc:
+        constraint = exc.constraint_name or ""
+        if "token" in constraint:
             # Token collision (astronomically rare) — treat as transient error
             log.error("Token uniqueness violation for %s — retry", body.email)
             raise HTTPException(status_code=500, detail="Subscription failed, please retry.")
         return JSONResponse(status_code=200, content={"message": "Already subscribed."})
     except Exception as exc:
-        conn.rollback()
         log.error("subscribe error: %s", exc)
         raise HTTPException(status_code=500, detail="Subscription failed.")
 
+    if new_token:
+        await _try_send_verification(body.email, new_token)
+        return JSONResponse(status_code=201, content={"message": "Check your email to confirm."})
+
+    await _try_send_verification(body.email, resend_token)  # type: ignore[arg-type]
+    return JSONResponse(status_code=200, content={"message": resend_msg})
+
 
 @app.get("/api/confirm/{token}")
-def confirm(token: str, conn: PgConn = Depends(get_pg_conn)):
+async def confirm(token: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
     """
     Confirm a subscription via the emailed token.
     Always redirects — never returns JSON — so it works directly from email clients.
     """
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, status FROM subscribers WHERE token = %s LIMIT 1",
-                (token,),
+        row = await conn.fetchrow(
+            "SELECT id, status, token_expires_at FROM subscribers WHERE token = $1 LIMIT 1",
+            token,
+        )
+        if not row:
+            return RedirectResponse(url=f"{settings.site_url}/?confirmed=invalid", status_code=302)
+        if row["status"] == "confirmed":
+            return RedirectResponse(url=f"{settings.site_url}/?confirmed=already", status_code=302)
+        if (
+            row["token_expires_at"] is not None
+            and row["token_expires_at"] < datetime.now(timezone.utc)
+        ):
+            return RedirectResponse(url=f"{settings.site_url}/?confirmed=expired", status_code=302)
+        async with conn.transaction():
+            await conn.execute(
+                "UPDATE subscribers SET status='confirmed', confirmed_at=now() WHERE id=$1",
+                row["id"],
             )
-            row = cur.fetchone()
-            if not row:
-                return RedirectResponse(url=f"{settings.site_url}/?confirmed=invalid", status_code=302)
-            if row["status"] == "confirmed":
-                return RedirectResponse(url=f"{settings.site_url}/?confirmed=already", status_code=302)
-            cur.execute(
-                "UPDATE subscribers SET status='confirmed', confirmed_at=now() WHERE id=%s",
-                (row["id"],),
-            )
-            conn.commit()
         return RedirectResponse(url=f"{settings.site_url}/?confirmed=true", status_code=302)
     except Exception as exc:
-        conn.rollback()
         log.error("confirm error: %s", exc)
         return RedirectResponse(url=f"{settings.site_url}/?confirmed=error", status_code=302)
+
+
+@app.get("/api/unsubscribe/{token}")
+async def unsubscribe_subscriber(token: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
+    """
+    Unsubscribe via the token included in every verification email.
+    Always redirects so it works directly from email clients.
+    """
+    try:
+        row = await conn.fetchrow(
+            "SELECT id, status FROM subscribers WHERE token = $1 LIMIT 1",
+            token,
+        )
+        if not row:
+            return RedirectResponse(url=f"{settings.site_url}/?unsubscribed=invalid", status_code=302)
+        if row["status"] == "unsubscribed":
+            return RedirectResponse(url=f"{settings.site_url}/?unsubscribed=already", status_code=302)
+        async with conn.transaction():
+            await conn.execute(
+                "UPDATE subscribers SET status='unsubscribed', unsubscribed_at=now() WHERE id=$1",
+                row["id"],
+            )
+        return RedirectResponse(url=f"{settings.site_url}/?unsubscribed=true", status_code=302)
+    except Exception as exc:
+        log.error("unsubscribe error: %s", exc)
+        return RedirectResponse(url=f"{settings.site_url}/?unsubscribed=error", status_code=302)
+
+
+@app.post("/api/ses-webhook", include_in_schema=False)
+async def ses_webhook(request: Request, conn: asyncpg.Connection = Depends(get_pg_conn)):
+    """
+    Handle SES bounce and complaint notifications forwarded via SNS.
+
+    Setup: configure an SES notification rule that publishes to an SNS topic,
+    then subscribe this endpoint as an HTTPS subscriber to that topic.
+
+    NOTE: SNS message signature verification is not yet implemented.
+    Until it is, restrict access to this endpoint at the nginx/firewall level
+    to SNS IP ranges (published at https://ip-ranges.amazonaws.com/ip-ranges.json).
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON.")
+
+    msg_type = body.get("Type", "")
+
+    # SNS first sends a SubscriptionConfirmation — auto-confirm from amazonaws.com URLs only.
+    if msg_type == "SubscriptionConfirmation":
+        subscribe_url = body.get("SubscribeURL", "")
+        if subscribe_url.startswith("https://sns.amazonaws.com/"):
+            try:
+                await asyncio.to_thread(urllib.request.urlopen, subscribe_url, None, 5)
+                log.info("SNS subscription confirmed for topic: %s", body.get("TopicArn"))
+            except Exception as exc:
+                log.warning("SNS subscription confirmation failed: %s", exc)
+        return JSONResponse(content={"status": "confirmed"})
+
+    if msg_type != "Notification":
+        return JSONResponse(content={"status": "ignored"})
+
+    try:
+        notification = json.loads(body.get("Message", "{}"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid SNS message payload.")
+
+    notification_type = notification.get("notificationType")
+    emails: list[str] = []
+
+    if notification_type == "Bounce":
+        if notification.get("bounce", {}).get("bounceType") == "Permanent":
+            emails = [
+                r["emailAddress"]
+                for r in notification.get("bounce", {}).get("bouncedRecipients", [])
+            ]
+            log.info("Permanent bounce for %d address(es)", len(emails))
+    elif notification_type == "Complaint":
+        emails = [
+            r["emailAddress"]
+            for r in notification.get("complaint", {}).get("complainedRecipients", [])
+        ]
+        log.info("Complaint received for %d address(es)", len(emails))
+
+    if emails:
+        async with conn.transaction():
+            for email in emails:
+                await conn.execute(
+                    "UPDATE subscribers SET status='unsubscribed', unsubscribed_at=now()"
+                    " WHERE email=$1 AND status != 'unsubscribed'",
+                    email,
+                )
+        log.info("Marked unsubscribed (%s): %s", notification_type, emails)
+
+    return JSONResponse(content={"status": "ok"})

@@ -1,49 +1,49 @@
 import logging
+from collections.abc import AsyncGenerator
 
-import psycopg2
-import psycopg2.extras
-import psycopg2.pool
+import asyncpg
 from config import settings
 from fastapi import Depends, HTTPException
 
 log = logging.getLogger(__name__)
 
-_pg_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+_pg_pool: asyncpg.Pool | None = None
 
 
-def init_pool() -> None:
+async def init_pool() -> None:
     global _pg_pool
-    _pg_pool = psycopg2.pool.ThreadedConnectionPool(
-        minconn=2,
-        maxconn=10,
+    _pg_pool = await asyncpg.create_pool(
         host=settings.blog_db_host,
         port=settings.blog_db_port,
         user=settings.blog_db_user,
         password=settings.blog_db_password,
-        dbname=settings.blog_db_name,
-        cursor_factory=psycopg2.extras.RealDictCursor,
+        database=settings.blog_db_name,
+        min_size=2,
+        max_size=10,
+        timeout=5.0,        # max seconds to wait for a connection
+        command_timeout=30.0,
     )
     log.info("PostgreSQL connection pool initialised (min=2, max=10)")
 
 
-def close_pool() -> None:
+async def close_pool() -> None:
     if _pg_pool:
-        _pg_pool.closeall()
+        await _pg_pool.close()
         log.info("PostgreSQL connection pool closed")
 
 
-def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
+def _get_pool() -> asyncpg.Pool:
     if _pg_pool is None:
         raise HTTPException(status_code=503, detail="Database pool not initialised.")
     return _pg_pool
 
 
-def get_pg_conn(pool: psycopg2.pool.ThreadedConnectionPool = Depends(_get_pool)):
-    conn = pool.getconn()
+async def get_pg_conn(
+    pool: asyncpg.Pool = Depends(_get_pool),
+) -> AsyncGenerator[asyncpg.Connection, None]:
+    """Yield a pooled connection; 503 on exhaustion instead of hanging forever."""
     try:
-        yield conn
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        pool.putconn(conn)
+        async with pool.acquire(timeout=5.0) as conn:
+            yield conn
+    except asyncpg.TooManyConnectionsError:
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable.")

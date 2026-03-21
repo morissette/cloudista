@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class HealthOut(BaseModel):
@@ -16,8 +16,8 @@ class MessageOut(BaseModel):
 
 class SubscribeIn(BaseModel):
     email: EmailStr
-    source: str = "coming_soon"
-    cf_turnstile_token: str | None = None
+    source: str = Field(default="coming_soon", max_length=100)
+    cf_turnstile_token: str | None = Field(default=None, max_length=2048)
 
 
 class PostSummary(BaseModel):

@@ -11,11 +11,10 @@ import html as _html
 import json as _json
 import logging
 
-import psycopg2
+import asyncpg
 from dependencies import get_pg_conn
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response
-from psycopg2.extensions import connection as PgConn
 from schemas import CategoryOut, PostDetail, PostList, PostSummary, TagOut
 
 log = logging.getLogger(__name__)
@@ -27,43 +26,35 @@ router = APIRouter(prefix="/api", tags=["blog"])
 
 
 @router.get("/search", response_model=PostList)
-def search_posts(
+async def search_posts(
     q: str = Query(..., min_length=2, max_length=200),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
-    conn: PgConn = Depends(get_pg_conn),
+    conn: asyncpg.Connection = Depends(get_pg_conn),
 ):
     """Full-text search across post titles and excerpts."""
     offset = (page - 1) * per_page
     term = f"%{q}%"
 
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT COUNT(*) FROM posts p JOIN authors a ON a.id = p.author_id
-                WHERE p.status = 'published'
-                  AND p.published_at <= NOW()
-                  AND (p.title ILIKE %s OR p.excerpt ILIKE %s OR p.slug ILIKE %s)
-                """,
-                (term, term, term),
-            )
-            total = cur.fetchone()["count"]
-
-            cur.execute(
-                """
-                SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,
-                       p.image_url, a.name AS author, p.published_at
-                FROM   posts p JOIN authors a ON a.id = p.author_id
-                WHERE  p.status = 'published'
-                  AND  p.published_at <= NOW()
-                  AND (p.title ILIKE %s OR p.excerpt ILIKE %s OR p.slug ILIKE %s)
-                ORDER BY p.published_at DESC LIMIT %s OFFSET %s
-                """,
-                (term, term, term, per_page, offset),
-            )
-            rows = cur.fetchall()
-    except psycopg2.Error as exc:
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM posts p JOIN authors a ON a.id = p.author_id"
+            " WHERE p.status = 'published' AND p.published_at <= NOW()"
+            " AND (p.title ILIKE $1 OR p.excerpt ILIKE $1 OR p.slug ILIKE $1)",
+            term,
+        )
+        rows = await conn.fetch(
+            "SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,"
+            " p.image_url, a.name AS author, p.published_at"
+            " FROM posts p JOIN authors a ON a.id = p.author_id"
+            " WHERE p.status = 'published' AND p.published_at <= NOW()"
+            " AND (p.title ILIKE $1 OR p.excerpt ILIKE $1 OR p.slug ILIKE $1)"
+            " ORDER BY p.published_at DESC LIMIT $2 OFFSET $3",
+            term,
+            per_page,
+            offset,
+        )
+    except asyncpg.PostgresError as exc:
         log.error("search_posts error: %s", exc)
         raise HTTPException(status_code=500, detail="Search failed.")
 
@@ -77,12 +68,12 @@ def search_posts(
 
 
 @router.get("/posts", response_model=PostList)
-def list_posts(
+async def list_posts(
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
     tag: str | None = Query(default=None),
     category: str | None = Query(default=None),
-    conn: PgConn = Depends(get_pg_conn),
+    conn: asyncpg.Connection = Depends(get_pg_conn),
 ):
     """
     Return a paginated list of published posts, newest first.
@@ -101,31 +92,35 @@ def list_posts(
     filters = ["p.status = 'published'", "p.published_at <= NOW()"]
     join_extra = ""
     params: list = []
+    n = 0
 
     if tag:
+        n += 1
         join_extra += " JOIN post_tags pt ON pt.post_id = p.id JOIN tags t ON t.id = pt.tag_id"
-        filters.append("t.slug = %s")
+        filters.append(f"t.slug = ${n}")
         params.append(tag)
 
     if category:
-        join_extra += " JOIN post_categories pc ON pc.post_id = p.id JOIN categories c ON c.id = pc.category_id"
-        filters.append("c.slug = %s")
+        n += 1
+        join_extra += (
+            " JOIN post_categories pc ON pc.post_id = p.id"
+            " JOIN categories c ON c.id = pc.category_id"
+        )
+        filters.append(f"c.slug = ${n}")
         params.append(category)
 
     where = " WHERE " + " AND ".join(filters)
 
     try:
-        with conn.cursor() as cur:
-            cur.execute(base_count + join_extra + where, params)
-            total = cur.fetchone()["count"]
-
-            cur.execute(
-                base_select + join_extra + where
-                + " ORDER BY p.published_at DESC LIMIT %s OFFSET %s",
-                params + [per_page, offset],
-            )
-            rows = cur.fetchall()
-    except psycopg2.Error as exc:
+        total = await conn.fetchval(base_count + join_extra + where, *params)
+        rows = await conn.fetch(
+            base_select + join_extra + where
+            + f" ORDER BY p.published_at DESC LIMIT ${n + 1} OFFSET ${n + 2}",
+            *params,
+            per_page,
+            offset,
+        )
+    except asyncpg.PostgresError as exc:
         log.error("list_posts error: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to fetch posts.")
 
@@ -139,48 +134,40 @@ def list_posts(
 
 
 @router.get("/posts/{slug}", response_model=PostDetail)
-def get_post(slug: str, conn: PgConn = Depends(get_pg_conn)):
+async def get_post(slug: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
     """Return a single published post with full HTML content, tags, and categories."""
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,
-                       p.image_url, p.image_credit, p.content_html,
-                       a.name AS author, p.published_at
-                FROM   posts p
-                JOIN   authors a ON a.id = p.author_id
-                WHERE  p.slug = %s AND p.status = 'published' AND p.published_at <= NOW()
-                """,
-                (slug,),
-            )
-            row = cur.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="Post not found.")
+        row = await conn.fetchrow(
+            "SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,"
+            " p.image_url, p.image_credit, p.content_html,"
+            " a.name AS author, p.published_at"
+            " FROM posts p JOIN authors a ON a.id = p.author_id"
+            " WHERE p.slug = $1 AND p.status = 'published' AND p.published_at <= NOW()",
+            slug,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Post not found.")
 
-            cur.execute(
-                """
-                SELECT t.slug FROM tags t
-                JOIN post_tags pt ON pt.tag_id = t.id
-                WHERE pt.post_id = %s ORDER BY t.name
-                """,
-                (row["id"],),
+        tags = [
+            r["slug"]
+            for r in await conn.fetch(
+                "SELECT t.slug FROM tags t JOIN post_tags pt ON pt.tag_id = t.id"
+                " WHERE pt.post_id = $1 ORDER BY t.name",
+                row["id"],
             )
-            tags = [r["slug"] for r in cur.fetchall()]
-
-            cur.execute(
-                """
-                SELECT c.slug FROM categories c
-                JOIN post_categories pc ON pc.category_id = c.id
-                WHERE pc.post_id = %s ORDER BY c.name
-                """,
-                (row["id"],),
+        ]
+        categories = [
+            r["slug"]
+            for r in await conn.fetch(
+                "SELECT c.slug FROM categories c JOIN post_categories pc ON pc.category_id = c.id"
+                " WHERE pc.post_id = $1 ORDER BY c.name",
+                row["id"],
             )
-            categories = [r["slug"] for r in cur.fetchall()]
+        ]
 
     except HTTPException:
         raise
-    except psycopg2.Error as exc:
+    except asyncpg.PostgresError as exc:
         log.error("get_post(%s) error: %s", slug, exc)
         raise HTTPException(status_code=500, detail="Failed to fetch post.")
 
@@ -188,52 +175,55 @@ def get_post(slug: str, conn: PgConn = Depends(get_pg_conn)):
 
 
 @router.get("/posts/{slug}/related", response_model=list[PostSummary])
-def related_posts(slug: str, limit: int = Query(default=4, ge=1, le=10), conn: PgConn = Depends(get_pg_conn)):
+async def related_posts(
+    slug: str,
+    limit: int = Query(default=4, ge=1, le=10),
+    conn: asyncpg.Connection = Depends(get_pg_conn),
+):
     """Return up to `limit` published posts most related to the given slug,
     ranked by shared category + tag overlap."""
     try:
-        with conn.cursor() as cur:
-            # Resolve slug → post id
-            cur.execute(
-                "SELECT id FROM posts WHERE slug = %s AND status = 'published' AND published_at <= NOW()",
-                (slug,),
-            )
-            row = cur.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="Post not found.")
-            post_id = row["id"]
+        post = await conn.fetchrow(
+            "SELECT id FROM posts WHERE slug = $1 AND status = 'published' AND published_at <= NOW()",
+            slug,
+        )
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found.")
+        post_id = post["id"]
 
-            cur.execute(
-                """
-                SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,
-                       p.image_url, a.name AS author, p.published_at
-                FROM   posts p
-                JOIN   authors a ON a.id = p.author_id
-                LEFT JOIN post_categories pc2
-                       ON pc2.post_id = p.id
-                      AND pc2.category_id IN (
-                            SELECT category_id FROM post_categories WHERE post_id = %s
-                          )
-                LEFT JOIN post_tags pt2
-                       ON pt2.post_id = p.id
-                      AND pt2.tag_id IN (
-                            SELECT tag_id FROM post_tags WHERE post_id = %s
-                          )
-                WHERE  p.status = 'published'
-                  AND  p.published_at <= NOW()
-                  AND  p.id != %s
-                  AND  (pc2.category_id IS NOT NULL OR pt2.tag_id IS NOT NULL)
-                GROUP  BY p.id, p.uuid, p.title, p.slug, p.excerpt, p.image_url, a.name, p.published_at
-                ORDER  BY COUNT(DISTINCT pc2.category_id) + COUNT(DISTINCT pt2.tag_id) DESC,
-                          p.published_at DESC
-                LIMIT  %s
-                """,
-                (post_id, post_id, post_id, limit),
-            )
-            rows = cur.fetchall()
+        rows = await conn.fetch(
+            """
+            SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,
+                   p.image_url, a.name AS author, p.published_at
+            FROM   posts p
+            JOIN   authors a ON a.id = p.author_id
+            LEFT JOIN post_categories pc2
+                   ON pc2.post_id = p.id
+                  AND pc2.category_id IN (
+                        SELECT category_id FROM post_categories WHERE post_id = $1
+                      )
+            LEFT JOIN post_tags pt2
+                   ON pt2.post_id = p.id
+                  AND pt2.tag_id IN (
+                        SELECT tag_id FROM post_tags WHERE post_id = $2
+                      )
+            WHERE  p.status = 'published'
+              AND  p.published_at <= NOW()
+              AND  p.id != $3
+              AND  (pc2.category_id IS NOT NULL OR pt2.tag_id IS NOT NULL)
+            GROUP  BY p.id, p.uuid, p.title, p.slug, p.excerpt, p.image_url, a.name, p.published_at
+            ORDER  BY COUNT(DISTINCT pc2.category_id) + COUNT(DISTINCT pt2.tag_id) DESC,
+                      p.published_at DESC
+            LIMIT  $4
+            """,
+            post_id,
+            post_id,
+            post_id,
+            limit,
+        )
     except HTTPException:
         raise
-    except psycopg2.Error as exc:
+    except asyncpg.PostgresError as exc:
         log.error("related_posts(%s) error: %s", slug, exc)
         raise HTTPException(status_code=500, detail="Failed to fetch related posts.")
 
@@ -241,43 +231,41 @@ def related_posts(slug: str, limit: int = Query(default=4, ge=1, le=10), conn: P
 
 
 @router.get("/tags", response_model=list[TagOut])
-def list_tags(conn: PgConn = Depends(get_pg_conn)):
+async def list_tags(conn: asyncpg.Connection = Depends(get_pg_conn)):
     """Return all tags that have at least one published post."""
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT t.id, t.name, t.slug
-                FROM   tags t
-                JOIN   post_tags pt ON pt.tag_id = t.id
-                JOIN   posts p      ON p.id = pt.post_id
-                WHERE  p.status = 'published' AND p.published_at <= NOW()
-                ORDER  BY t.name
-                """
-            )
-            return [TagOut(**dict(r)) for r in cur.fetchall()]
-    except psycopg2.Error as exc:
+        rows = await conn.fetch(
+            """
+            SELECT DISTINCT t.id, t.name, t.slug
+            FROM   tags t
+            JOIN   post_tags pt ON pt.tag_id = t.id
+            JOIN   posts p      ON p.id = pt.post_id
+            WHERE  p.status = 'published' AND p.published_at <= NOW()
+            ORDER  BY t.name
+            """
+        )
+        return [TagOut(**dict(r)) for r in rows]
+    except asyncpg.PostgresError as exc:
         log.error("list_tags error: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to fetch tags.")
 
 
 @router.get("/categories", response_model=list[CategoryOut])
-def list_categories(conn: PgConn = Depends(get_pg_conn)):
+async def list_categories(conn: asyncpg.Connection = Depends(get_pg_conn)):
     """Return all categories that have at least one published post."""
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT c.id, c.name, c.slug, c.description, c.parent_id
-                FROM   categories c
-                JOIN   post_categories pc ON pc.category_id = c.id
-                JOIN   posts p            ON p.id = pc.post_id
-                WHERE  p.status = 'published' AND p.published_at <= NOW()
-                ORDER  BY c.name
-                """
-            )
-            return [CategoryOut(**dict(r)) for r in cur.fetchall()]
-    except psycopg2.Error as exc:
+        rows = await conn.fetch(
+            """
+            SELECT DISTINCT c.id, c.name, c.slug, c.description, c.parent_id
+            FROM   categories c
+            JOIN   post_categories pc ON pc.category_id = c.id
+            JOIN   posts p            ON p.id = pc.post_id
+            WHERE  p.status = 'published' AND p.published_at <= NOW()
+            ORDER  BY c.name
+            """
+        )
+        return [CategoryOut(**dict(r)) for r in rows]
+    except asyncpg.PostgresError as exc:
         log.error("list_categories error: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to fetch categories.")
 
@@ -303,21 +291,15 @@ def _xml_escape(s: str) -> str:
 
 
 @router.get("/sitemap.xml", include_in_schema=False)
-def sitemap(conn: PgConn = Depends(get_pg_conn)):
+async def sitemap(conn: asyncpg.Connection = Depends(get_pg_conn)):
     """Dynamically generate sitemap.xml from all published posts."""
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT slug, published_at AS lastmod
-                FROM   posts
-                WHERE  status = 'published'
-                  AND  published_at <= NOW()
-                ORDER  BY published_at DESC
-                """
-            )
-            posts = cur.fetchall()
-    except psycopg2.Error as exc:
+        posts = await conn.fetch(
+            "SELECT slug, published_at AS lastmod"
+            " FROM posts WHERE status = 'published' AND published_at <= NOW()"
+            " ORDER BY published_at DESC"
+        )
+    except asyncpg.PostgresError as exc:
         log.error("sitemap error: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to generate sitemap.")
 
@@ -529,42 +511,40 @@ def _render_post_html(row: dict, tags: list, categories: list) -> str:
 
 
 @html_router.get("/blog/{slug}", response_class=HTMLResponse, include_in_schema=False)
-def render_post_page(slug: str, conn: PgConn = Depends(get_pg_conn)):
+async def render_post_page(slug: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
     """Return a server-rendered HTML page for a blog post (SEO / crawlers)."""
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT p.id, p.title, p.slug, p.excerpt,
-                       p.image_url, p.image_credit, p.content_html,
-                       a.name AS author, p.published_at
-                FROM   posts p JOIN authors a ON a.id = p.author_id
-                WHERE  p.slug = %s AND p.status = 'published'
-                  AND  p.published_at <= NOW()
-                """,
-                (slug,),
-            )
-            row = cur.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="Post not found.")
+        row = await conn.fetchrow(
+            "SELECT p.id, p.title, p.slug, p.excerpt,"
+            " p.image_url, p.image_credit, p.content_html,"
+            " a.name AS author, p.published_at"
+            " FROM posts p JOIN authors a ON a.id = p.author_id"
+            " WHERE p.slug = $1 AND p.status = 'published' AND p.published_at <= NOW()",
+            slug,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Post not found.")
 
-            cur.execute(
+        tags = [
+            r["slug"]
+            for r in await conn.fetch(
                 "SELECT t.slug FROM tags t JOIN post_tags pt ON pt.tag_id = t.id"
-                " WHERE pt.post_id = %s ORDER BY t.name",
-                (row["id"],),
+                " WHERE pt.post_id = $1 ORDER BY t.name",
+                row["id"],
             )
-            tags = [r["slug"] for r in cur.fetchall()]
-
-            cur.execute(
+        ]
+        categories = [
+            r["slug"]
+            for r in await conn.fetch(
                 "SELECT c.slug FROM categories c JOIN post_categories pc ON pc.category_id = c.id"
-                " WHERE pc.post_id = %s ORDER BY c.name",
-                (row["id"],),
+                " WHERE pc.post_id = $1 ORDER BY c.name",
+                row["id"],
             )
-            categories = [r["slug"] for r in cur.fetchall()]
+        ]
 
     except HTTPException:
         raise
-    except psycopg2.Error as exc:
+    except asyncpg.PostgresError as exc:
         log.error("render_post_page(%s) error: %s", slug, exc)
         raise HTTPException(status_code=500)
 
