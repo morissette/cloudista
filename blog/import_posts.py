@@ -180,44 +180,78 @@ def import_posts(blog_dir: Path, dsn: str, dry_run: bool = False):
 
         try:
             cur.execute(
-                """
-                INSERT INTO posts
-                    (title, slug, content_md, content_html, excerpt,
-                     author_id, status, original_url, image_url, published_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (slug) DO UPDATE SET
-                    title        = EXCLUDED.title,
-                    content_md   = EXCLUDED.content_md,
-                    content_html = EXCLUDED.content_html,
-                    excerpt      = EXCLUDED.excerpt,
-                    original_url = EXCLUDED.original_url,
-                    image_url    = EXCLUDED.image_url,
-                    published_at = EXCLUDED.published_at,
-                    status       = EXCLUDED.status,
-                    updated_at   = NOW()
-                RETURNING (xmax = 0) AS is_insert
-                """,
-                (
-                    post["title"],
-                    post["slug"],
-                    post["content_md"],
-                    post["content_html"],
-                    post["excerpt"],
-                    author_id,
-                    post["status"],
-                    post["original_url"],
-                    post["image_url"],
-                    post["published_at"],
-                ),
+                "SELECT id, title, content_md FROM posts WHERE slug = %s",
+                (post["slug"],),
             )
-            row = cur.fetchone()
-            conn.commit()
-            if row[0]:
+            existing = cur.fetchone()
+
+            if existing:
+                post_id, old_title, old_content_md = existing
+                content_changed = (
+                    old_content_md != post["content_md"] or old_title != post["title"]
+                )
+                if content_changed:
+                    cur.execute(
+                        "INSERT INTO post_revisions"
+                        " (post_id, title, content_md, content_html, excerpt)"
+                        " SELECT id, title, content_md, content_html, excerpt"
+                        " FROM posts WHERE id = %s",
+                        (post_id,),
+                    )
+                cur.execute(
+                    """
+                    UPDATE posts SET
+                        title        = %s,
+                        content_md   = %s,
+                        content_html = %s,
+                        excerpt      = %s,
+                        original_url = %s,
+                        image_url    = %s,
+                        published_at = %s,
+                        status       = %s,
+                        updated_at   = NOW()
+                    WHERE id = %s
+                    """,
+                    (
+                        post["title"],
+                        post["content_md"],
+                        post["content_html"],
+                        post["excerpt"],
+                        post["original_url"],
+                        post["image_url"],
+                        post["published_at"],
+                        post["status"],
+                        post_id,
+                    ),
+                )
+                conn.commit()
+                updated += 1
+                suffix = " (content updated)" if content_changed else " (metadata only)"
+                print(f"  ~ {path.name}{suffix}")
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO posts
+                        (title, slug, content_md, content_html, excerpt,
+                         author_id, status, original_url, image_url, published_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        post["title"],
+                        post["slug"],
+                        post["content_md"],
+                        post["content_html"],
+                        post["excerpt"],
+                        author_id,
+                        post["status"],
+                        post["original_url"],
+                        post["image_url"],
+                        post["published_at"],
+                    ),
+                )
+                conn.commit()
                 inserted += 1
                 print(f"  + {path.name}")
-            else:
-                updated += 1
-                print(f"  ~ {path.name} (updated)")
         except Exception as e:
             conn.rollback()
             errors.append((path.name, str(e)))

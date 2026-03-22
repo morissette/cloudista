@@ -28,6 +28,23 @@ CREATE OR REPLACE VIEW active_subscribers AS
     WHERE status = 'confirmed';
 
 -- ============================================================
+--  Post revisions
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS post_revisions (
+    id           INTEGER      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    post_id      INTEGER      NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    title        TEXT         NOT NULL,
+    content_md   TEXT         NOT NULL,
+    content_html TEXT         NOT NULL,
+    excerpt      TEXT,
+    revised_at   TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_post_revisions_post_id
+    ON post_revisions (post_id, revised_at DESC);
+
+-- ============================================================
 --  Production upgrade migrations (run once per schema change):
 --
 --  -- Add token_expires_at (from pre-expiry schema):
@@ -36,4 +53,8 @@ CREATE OR REPLACE VIEW active_subscribers AS
 --
 --  -- Drop the now-redundant manual token index if it exists:
 --  DROP INDEX IF EXISTS idx_subscribers_token;
+--
+--  -- Post revisions table:
+--  CREATE TABLE IF NOT EXISTS post_revisions ( ... );
+--  CREATE INDEX IF NOT EXISTS idx_post_revisions_post_id ...;
 -- ============================================================

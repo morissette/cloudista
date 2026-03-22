@@ -12,10 +12,11 @@ import json as _json
 import logging
 
 import asyncpg
+from config import settings
 from dependencies import get_pg_conn, limiter
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
-from schemas import CategoryOut, PostDetail, PostList, PostSummary, TagOut
+from schemas import CategoryOut, MessageOut, PostDetail, PostList, PostRevisionOut, PostSummary, TagOut
 
 log = logging.getLogger(__name__)
 
@@ -230,6 +231,69 @@ async def related_posts(
         raise HTTPException(status_code=500, detail="Failed to fetch related posts.")
 
     return [PostSummary(**dict(r)) for r in rows]
+
+
+@router.get("/posts/{slug}/revisions", response_model=list[PostRevisionOut])
+async def list_revisions(slug: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
+    """Return revision history for a post (newest first). Empty list if no revisions exist."""
+    try:
+        post = await conn.fetchrow("SELECT id FROM posts WHERE slug = $1", slug)
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found.")
+        rows = await conn.fetch(
+            "SELECT id, title, excerpt, revised_at FROM post_revisions"
+            " WHERE post_id = $1 ORDER BY revised_at DESC",
+            post["id"],
+        )
+    except HTTPException:
+        raise
+    except asyncpg.PostgresError as exc:
+        log.error("list_revisions(%s) error: %s", slug, exc)
+        raise HTTPException(status_code=500, detail="Failed to fetch revisions.")
+    return [PostRevisionOut(**dict(r)) for r in rows]
+
+
+@router.post("/posts/{slug}/revisions/{revision_id}/restore", response_model=MessageOut)
+async def restore_revision(
+    slug: str,
+    revision_id: int,
+    request: Request,
+    conn: asyncpg.Connection = Depends(get_pg_conn),
+):
+    """Restore a previous revision. Snapshots the current version before overwriting."""
+    if not settings.admin_key:
+        raise HTTPException(status_code=503, detail="Revert not configured.")
+    if request.headers.get("X-Admin-Key") != settings.admin_key:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+    try:
+        post = await conn.fetchrow("SELECT id FROM posts WHERE slug = $1", slug)
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found.")
+        rev = await conn.fetchrow(
+            "SELECT id, title, content_md, content_html, excerpt FROM post_revisions"
+            " WHERE id = $1 AND post_id = $2",
+            revision_id,
+            post["id"],
+        )
+        if not rev:
+            raise HTTPException(status_code=404, detail="Revision not found.")
+        async with conn.transaction():
+            await conn.execute(
+                "INSERT INTO post_revisions (post_id, title, content_md, content_html, excerpt)"
+                " SELECT id, title, content_md, content_html, excerpt FROM posts WHERE id = $1",
+                post["id"],
+            )
+            await conn.execute(
+                "UPDATE posts SET title=$1, content_md=$2, content_html=$3, excerpt=$4,"
+                " updated_at=NOW() WHERE id=$5",
+                rev["title"], rev["content_md"], rev["content_html"], rev["excerpt"], post["id"],
+            )
+    except HTTPException:
+        raise
+    except asyncpg.PostgresError as exc:
+        log.error("restore_revision(%s, %d) error: %s", slug, revision_id, exc)
+        raise HTTPException(status_code=500, detail="Failed to restore revision.")
+    return MessageOut(message="Revision restored.")
 
 
 @router.get("/tags", response_model=list[TagOut])

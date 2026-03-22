@@ -59,3 +59,10 @@ class PostList(BaseModel):
     page: int
     pages: int
     per_page: int
+
+
+class PostRevisionOut(BaseModel):
+    id: int
+    title: str
+    excerpt: str | None
+    revised_at: datetime

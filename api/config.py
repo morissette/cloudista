@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     site_url: str = "https://cloudista.org"
     turnstile_secret: str = ""
     ses_topic_arn: str = ""  # optional: SNS TopicArn allowlist for /api/ses-webhook
+    admin_key: str = ""  # optional: protects POST /api/blog/posts/{slug}/revisions/{id}/restore
 
     @field_validator("blog_db_password")
     @classmethod
