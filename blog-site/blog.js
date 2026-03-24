@@ -59,7 +59,7 @@ if (listingEl) {
     const excerpt = post.excerpt || '';
     const href    = `/blog/${post.slug}`;
     const img     = post.image_url
-      ? `<div class="post-card__img-wrap"><img class="post-card__img" src="${escHtml(post.image_url)}" alt="" loading="lazy"></div>`
+      ? `<div class="post-card__img-wrap"><img class="post-card__img" src="${escHtml(post.image_url)}" alt="" loading="lazy" decoding="async"></div>`
       : '';
     return `
       <a class="post-card${post.image_url ? ' post-card--has-img' : ''}" href="${href}">
