@@ -72,6 +72,7 @@ async def search_posts(
 
 @router.get("/posts", response_model=PostList)
 async def list_posts(
+    response: Response,
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
     tag: str | None = Query(default=None),
@@ -82,6 +83,7 @@ async def list_posts(
     Return a paginated list of published posts, newest first.
     Optionally filter by ?tag=slug or ?category=slug.
     """
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
     offset = (page - 1) * per_page
 
     base_select = """
@@ -317,8 +319,9 @@ async def list_tags(conn: asyncpg.Connection = Depends(get_pg_conn)):
 
 
 @router.get("/categories", response_model=list[CategoryOut])
-async def list_categories(conn: asyncpg.Connection = Depends(get_pg_conn)):
+async def list_categories(response: Response, conn: asyncpg.Connection = Depends(get_pg_conn)):
     """Return all categories that have at least one published post."""
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
     try:
         rows = await conn.fetch(
             """
@@ -443,7 +446,8 @@ _POST_HTML_TEMPLATE = """\
   <link rel="preload" as="style" href="/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="{google_fonts_url}" rel="stylesheet">
+  <link rel="preload" href="{google_fonts_url}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link href="{google_fonts_url}" rel="stylesheet"></noscript>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -555,7 +559,7 @@ def _render_post_html(row: dict, tags: list, categories: list) -> str:
         hero_html = (
             f'<div class="post-hero" id="post-hero">'
             f'<img class="post-hero__img" id="post-hero-img"'
-            f' src="{e(image)}" alt="{e(title)}" loading="lazy">'
+            f' src="{e(image)}" alt="{e(title)}" loading="eager" fetchpriority="high">'
             f"{credit_html}</div>"
         )
     else:
