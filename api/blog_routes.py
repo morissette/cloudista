@@ -412,7 +412,7 @@ html_router = APIRouter(tags=["blog"])
 _GOOGLE_FONTS_URL = (
     "https://fonts.googleapis.com/css2?family=Inter:opsz,wght"
     "@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900"
-    "&family=JetBrains+Mono:wght@500&display=swap"
+    "&family=JetBrains+Mono:wght@500&display=optional"
 )
 
 _POST_HTML_TEMPLATE = """\
