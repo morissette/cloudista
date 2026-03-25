@@ -1,0 +1,51 @@
+---
+name: Email List Hygiene
+
+"on":
+  schedule:
+    - cron: "0 6 * * 1"    # Mondays at 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — log what would be deleted without deleting"
+        type: boolean
+        default: true
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Purge stale pending subscribers
+        env:
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} bash << REMOTE
+          DB_PASS=\$(grep BLOG_DB_PASSWORD /www/cloudista.org/api/.env | cut -d= -f2)
+
+          if [ "${INPUT_DRY_RUN}" = "true" ]; then
+            echo "==> [dry-run] Pending subscribers older than 30 days:"
+            sudo docker exec \$(sudo docker ps -qf name=cloudista-db) \
+              psql -U cloudista -d cloudista -c \
+              "SELECT email, created_at FROM subscribers
+               WHERE status = 'pending'
+                 AND created_at < now() - INTERVAL '30 days'
+               ORDER BY created_at;"
+          else
+            echo "==> Purging stale pending subscribers..."
+            sudo docker exec \$(sudo docker ps -qf name=cloudista-db) \
+              psql -U cloudista -d cloudista -c \
+              "DELETE FROM subscribers
+               WHERE status = 'pending'
+                 AND created_at < now() - INTERVAL '30 days'
+               RETURNING email, created_at;"
+          fi
+          REMOTE
