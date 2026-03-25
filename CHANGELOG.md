@@ -198,3 +198,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_subscribers_prefs_token ON subscribers (pr
 - nginx config, PostgreSQL schema, Docker setup
 - GitHub remote at `github.com/morissette/cloudista`
 - `.github/workflows/deploy.yml` — CI/CD on push to `main`
+
