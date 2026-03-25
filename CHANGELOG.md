@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — DRY tag/category query helper
+
+### Changed
+- `api/blog_routes.py` — extracted `_fetch_post_tags_and_categories(conn, post_id)` helper; identical query blocks in `get_post()` and `render_post_page()` replaced with a single call
+
+---
+
 ## [2026-03-25] — health check aborts deploy on failure
 
 ### Fixed

@@ -23,6 +23,31 @@ from schemas import CategoryOut, MessageOut, PostDetail, PostList, PostRevisionO
 log = logging.getLogger(__name__)
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+async def _fetch_post_tags_and_categories(
+    conn: asyncpg.Connection, post_id: int
+) -> tuple[list[str], list[str]]:
+    """Fetch tag slugs and category slugs for a post. Shared by get_post and render_post_page."""
+    tags = [
+        r["slug"]
+        for r in await conn.fetch(
+            "SELECT t.slug FROM tags t JOIN post_tags pt ON pt.tag_id = t.id"
+            " WHERE pt.post_id = $1 ORDER BY t.name",
+            post_id,
+        )
+    ]
+    categories = [
+        r["slug"]
+        for r in await conn.fetch(
+            "SELECT c.slug FROM categories c JOIN post_categories pc ON pc.category_id = c.id"
+            " WHERE pc.post_id = $1 ORDER BY c.name",
+            post_id,
+        )
+    ]
+    return tags, categories
+
+
 # ── Router ────────────────────────────────────────────────────────────────────
 
 router = APIRouter(prefix="/api", tags=["blog"])
@@ -155,22 +180,7 @@ async def get_post(slug: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
         if not row:
             raise HTTPException(status_code=404, detail="Post not found.")
 
-        tags = [
-            r["slug"]
-            for r in await conn.fetch(
-                "SELECT t.slug FROM tags t JOIN post_tags pt ON pt.tag_id = t.id"
-                " WHERE pt.post_id = $1 ORDER BY t.name",
-                row["id"],
-            )
-        ]
-        categories = [
-            r["slug"]
-            for r in await conn.fetch(
-                "SELECT c.slug FROM categories c JOIN post_categories pc ON pc.category_id = c.id"
-                " WHERE pc.post_id = $1 ORDER BY c.name",
-                row["id"],
-            )
-        ]
+        tags, categories = await _fetch_post_tags_and_categories(conn, row["id"])
 
     except HTTPException:
         raise
@@ -705,22 +715,7 @@ async def render_post_page(slug: str, conn: asyncpg.Connection = Depends(get_pg_
         if not row:
             raise HTTPException(status_code=404, detail="Post not found.")
 
-        tags = [
-            r["slug"]
-            for r in await conn.fetch(
-                "SELECT t.slug FROM tags t JOIN post_tags pt ON pt.tag_id = t.id"
-                " WHERE pt.post_id = $1 ORDER BY t.name",
-                row["id"],
-            )
-        ]
-        categories = [
-            r["slug"]
-            for r in await conn.fetch(
-                "SELECT c.slug FROM categories c JOIN post_categories pc ON pc.category_id = c.id"
-                " WHERE pc.post_id = $1 ORDER BY c.name",
-                row["id"],
-            )
-        ]
+        tags, categories = await _fetch_post_tags_and_categories(conn, row["id"])
 
     except HTTPException:
         raise
