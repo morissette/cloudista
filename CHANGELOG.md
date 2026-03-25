@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — health check aborts deploy on failure
+
+### Fixed
+- `deploy.sh` — health check now exits 1 (abort) instead of printing a warning and continuing; a broken container can no longer produce a green deploy
+
+---
+
 ## [2026-03-25] — blog route test coverage
 
 ### Added
