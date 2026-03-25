@@ -150,6 +150,62 @@ Missing required variables raise a `ValidationError` at startup with a clear mes
 
 ---
 
+## Productization roadmap
+
+### Infrastructure & platform
+- [x] PostgreSQL schema (posts, tags, authors, subscribers)
+- [x] FastAPI backend (Docker, EC2, `--network host`)
+- [x] nginx reverse proxy + static file serving
+- [x] SSL/TLS via Certbot (auto-renewal)
+- [x] Cloudflare in front (real-IP forwarding configured)
+- [x] Security headers (CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy)
+- [x] `/api/health` endpoint with DB status
+- [x] Migrate subscribers from MySQL → PostgreSQL
+
+### CI/CD & quality
+- [x] GitHub Actions: lint (ruff, eslint, yamllint, shellcheck via reviewdog)
+- [x] GitHub Actions: pytest suite (unit + integration, mocked DB)
+- [x] GitHub Actions: auto-deploy on push to `main` (detects `--api` vs `--site`)
+- [x] Branch protection: PRs required, lint + test must pass, signed commits enforced
+- [x] `make dev` local dev environment (Docker Postgres + uvicorn hot-reload)
+
+### Blog content & UX
+- [x] Blog at root URL (`cloudista.org`) — listing + post pages
+- [x] Server-rendered post HTML via FastAPI (SEO-friendly)
+- [x] Client-side search
+- [x] Categories + tags + related posts
+- [x] Pagination
+- [x] Post revision history and restore
+- [x] Post hero images (Unsplash/Pexels via `populate_images.py`)
+- [x] WebP images with nginx content negotiation (fallback to original)
+- [x] Performance: non-blocking fonts, CLS/LCP fixes
+- [x] Open Graph + Twitter card meta tags
+- [x] Sitemap at `/sitemap.xml`
+- [x] RSS feed at `/feed.xml`
+- [x] `robots.txt`
+
+### Subscriber / email
+- [x] Subscribe form with Cloudflare Turnstile CAPTCHA
+- [x] Rate limiting on `/api/subscribe` (5/min per IP)
+- [x] SES verification email (72-hour token expiry)
+- [x] Confirmation flow (`/api/confirm/{token}`)
+- [x] Unsubscribe link in every email (`/api/unsubscribe/{token}`)
+- [x] SES bounce/complaint webhook via SNS
+- [x] Verification email copy updated for live blog
+- [ ] **Request SES production access** (currently sandbox — only verified identities can receive mail)
+- [ ] **New-post notification email** — send to confirmed subscribers when a post is published
+
+### SEO & discoverability
+- [x] Server-rendered post pages (crawlable HTML with title, description, canonical)
+- [x] Sitemap + RSS
+- [ ] **Per-post OG image** — post pages use the generic `og-image.png`; should use the post's hero image
+- [ ] **Google Search Console** — submit sitemap, verify indexing
+
+### Analytics
+- [ ] **Add analytics** — Plausible or Google Analytics (GA4)
+
+---
+
 ## Migrating from MySQL (one-time)
 
 If upgrading from an instance with the legacy MySQL subscriber database:
