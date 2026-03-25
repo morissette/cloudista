@@ -6,6 +6,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — image localization + import fix
+
+### Added
+- `scripts/localize_images.py` — downloads external CDN `image_url`s for all published posts directly to `/www/cloudista.org/images/posts/<slug>.jpg` on the server, then updates DB to the local path; idempotent (skips slugs already on disk)
+- `.github/workflows/localize-images.yml` — manual GHA workflow; optionally runs `populate_images.py` first (fills NULL `image_url`s), then SSHes to server and runs `localize_images.py` in-place
+
+### Fixed
+- `blog/import_posts.py` — UPDATE path was unconditionally overwriting `image_url` with NULL when a `.txt` file lacked an `Image:` frontmatter field, wiping images set by `populate_images.py` or the `post-image` skill on every re-import; now preserves the existing DB value when frontmatter has no `Image:`
+
+---
+
 ## [2026-03-25] — subscriber notifications, analytics, internal linking
 
 ### Added
@@ -19,7 +30,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `blog/check_internal_links.py` — cluster-aware script to report missing internal links across related posts; `--cluster`, `--verbose` flags
 - Plausible privacy-friendly analytics on all pages (`site/index.html`, `blog-site/index.html`, `blog-site/post.html`, SSR head in `api/blog_routes.py`)
 - RSS feed at `/feed.xml`; Subscribe modal on blog listing page
-- Internal links added across ~40 posts in 8 topic clusters: Terraform (7 posts), Kubernetes (9 posts), Security/secrets (8 posts), Go/gRPC (5 posts), CI/CD (5 posts), Lambda (3 posts), SaltStack (4 posts), NFCU 2-part series
+- Internal links added across ~41 posts in 8 topic clusters: Terraform (7 posts), Kubernetes (9 posts), Security/secrets (8 posts), Go/gRPC (5 posts), CI/CD (5 posts), Lambda (3 posts), SaltStack (4 posts), NFCU 2-part series
 - `README.md` — productization roadmap, 3-month revenue roadmap; MySQL migration section removed
 
 ### Changed
