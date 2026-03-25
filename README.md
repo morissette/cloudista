@@ -206,6 +206,40 @@ Missing required variables raise a `ValidationError` at startup with a clear mes
 
 ---
 
+## Revenue roadmap (next 3 months)
+
+Goal: reach first revenue by month 3. Strategy: grow organic search traffic → build subscriber list → monetize via sponsorships and a paid tier.
+
+### Month 1 — Audience foundation
+- [ ] **Google Search Console** — submit sitemap, verify indexing, monitor impressions
+- [ ] **Per-post OG image** — use post hero image for social shares (higher CTR)
+- [ ] **Consistent publishing cadence** — 2–3 posts/week targeting long-tail DevOps/cloud keywords
+- [ ] **Keyword research** — identify low-competition, high-intent terms (e.g. "kubectl debug cheatsheet", "terraform state locking fix")
+- [ ] **Internal linking pass** — link related posts to each other to improve crawl depth and time-on-site
+- [ ] **Email list hygiene** — purge unconfirmed subscribers older than 30 days; track open rate as baseline
+
+### Month 2 — Monetization groundwork
+- [ ] **Sponsorship page** — audience stats, rate card, contact form; target DevOps SaaS companies (Datadog, Doppler, Cloudflare, Pulumi, etc.)
+- [ ] **Carbon Ads or EthicalAds** — low-friction developer-focused ad network; single slot in post sidebar/footer
+- [ ] **Affiliate links** — DigitalOcean, Linode/Akamai, AWS (via Amazon Associates) referral links in relevant posts
+- [ ] **Subscriber milestone target: 100 confirmed** — use as signal for first outbound sponsorship pitch
+
+### Month 3 — First revenue
+- [ ] **First sponsored post or newsletter slot** — flat-fee placement ($150–$500 for a technical blog at this stage)
+- [ ] **"Buy me a coffee" / GitHub Sponsors** — low-friction one-time support for readers who find value
+- [ ] **Premium content experiment** — one gated deep-dive (e.g. "Production Kubernetes on a Budget: Full Walkthrough") behind an email gate or $5–10 paywall via Gumroad/Lemon Squeezy
+- [ ] **Referral program** — "Share with a colleague" CTA in digest emails with a tracked link
+
+### Metrics to track
+| Metric | Month 1 target | Month 3 target |
+|--------|----------------|----------------|
+| Organic search impressions | Baseline | 5,000/mo |
+| Confirmed subscribers | 50 | 200 |
+| Monthly page views | Baseline | 2,000 |
+| Revenue | $0 | First dollar |
+
+---
+
 ## Migrating from MySQL (one-time)
 
 If upgrading from an instance with the legacy MySQL subscriber database:
