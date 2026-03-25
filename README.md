@@ -192,8 +192,8 @@ Missing required variables raise a `ValidationError` at startup with a clear mes
 - [x] Unsubscribe link in every email (`/api/unsubscribe/{token}`)
 - [x] SES bounce/complaint webhook via SNS
 - [x] Verification email copy updated for live blog
-- [ ] **Request SES production access** (currently sandbox — only verified identities can receive mail)
-- [ ] **New-post notification email** — send to confirmed subscribers when a post is published
+- [x] **SES production access** — granted (50k/day, 14/sec; carries over from account-level approval)
+- [x] **New-post notification email** — immediate and weekly digest modes; subscriber frequency preferences via one-time link (`/api/preferences/{token}`); GHA workflows on cron
 
 ### SEO & discoverability
 - [x] Server-rendered post pages (crawlable HTML with title, description, canonical)
