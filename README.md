@@ -202,7 +202,7 @@ Missing required variables raise a `ValidationError` at startup with a clear mes
 - [ ] **Google Search Console** — submit sitemap, verify indexing
 
 ### Analytics
-- [ ] **Add analytics** — Plausible or Google Analytics (GA4)
+- [x] Plausible privacy-friendly analytics (all pages, no cookie banner required)
 
 ---
 
