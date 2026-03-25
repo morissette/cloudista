@@ -506,6 +506,9 @@ _POST_HTML_TEMPLATE = """\
   <link rel="preload" href="{google_fonts_url}" as="style" onload="this.onload=null;this.rel='stylesheet'">
   <noscript><link href="{google_fonts_url}" rel="stylesheet"></noscript>
   <link rel="stylesheet" href="/style.css">
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-GZSLQ84Mu1WZS1xQ0tHRs.js"></script>
+  <script>window.plausible=window.plausible||function(){{(plausible.q=plausible.q||[]).push(arguments)}},plausible.init=plausible.init||function(i){{plausible.o=i||{{}}}};plausible.init()</script>
 </head>
 <body>
 
