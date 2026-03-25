@@ -216,7 +216,7 @@ Goal: reach first revenue by month 3. Strategy: grow organic search traffic → 
 - [ ] **Consistent publishing cadence** — 2–3 posts/week targeting long-tail DevOps/cloud keywords
 - [ ] **Keyword research** — identify low-competition, high-intent terms (e.g. "kubectl debug cheatsheet", "terraform state locking fix")
 - [ ] **Internal linking pass** — link related posts to each other to improve crawl depth and time-on-site
-- [ ] **Email list hygiene** — purge unconfirmed subscribers older than 30 days; track open rate as baseline
+- [x] **Email list hygiene** — weekly GHA cron purges `pending` subscribers older than 30 days; dry-run mode via `workflow_dispatch`
 
 ### Month 2 — Monetization groundwork
 - [ ] **Sponsorship page** — audience stats, rate card, contact form; target DevOps SaaS companies (Datadog, Doppler, Cloudflare, Pulumi, etc.)
