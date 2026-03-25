@@ -32,7 +32,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.x509 import load_pem_x509_certificate
 from dependencies import _real_ip, close_pool, get_pg_conn, init_pool, limiter
 from email_template import build_verification_email
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from schemas import HealthOut, MessageOut, PreferencesIn, SubscribeIn
@@ -585,8 +585,17 @@ async def preferences_page(token: str, saved: str = "", conn: asyncpg.Connection
 
 
 @app.post("/api/preferences/{token}", include_in_schema=False)
-async def update_preferences(token: str, body: PreferencesIn, conn: asyncpg.Connection = Depends(get_pg_conn)):
-    """Save subscriber frequency preference."""
+async def update_preferences(
+    token: str,
+    frequency: str = Form(...),
+    conn: asyncpg.Connection = Depends(get_pg_conn),
+):
+    """Save subscriber frequency preference — accepts HTML form submission."""
+    from pydantic import ValidationError
+    try:
+        body = PreferencesIn(frequency=frequency)
+    except ValidationError:
+        raise HTTPException(status_code=422, detail="Invalid frequency value.")
     try:
         result = await conn.execute(
             "UPDATE subscribers SET frequency = $1 WHERE prefs_token = $2 AND status = 'confirmed'",
