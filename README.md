@@ -168,6 +168,14 @@ Missing required variables raise a `ValidationError` at startup with a clear mes
 - [x] GitHub Actions: auto-deploy on push to `main` (detects `--api` vs `--site`)
 - [x] Branch protection: PRs required, lint + test must pass, signed commits enforced
 - [x] `make dev` local dev environment (Docker Postgres + uvicorn hot-reload)
+- [ ] **Upgrade to Python 3.12**
+  - [ ] Update `Dockerfile` base image from `python:3.11-slim` to `python:3.12-slim`
+  - [ ] Update `Pipfile` `python_version` from `"3.10"` to `"3.12"`
+  - [ ] Update `.github/workflows/test.yml` Python version to `"3.12"`
+  - [ ] Update `.github/workflows/populate-images.yml` Python version to `"3.12"`
+  - [ ] Update `.github/workflows/localize-images.yml` Python version to `"3.12"`
+  - [ ] Run full test suite and fix any deprecation-related failures
+  - [ ] Deploy and verify production startup
 
 ### Blog content & UX
 - [x] Blog at root URL (`cloudista.org`) — listing + post pages
