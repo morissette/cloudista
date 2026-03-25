@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — replace hardcoded site URL with settings.site_url
+
+### Changed
+- `api/blog_routes.py` — `_SITE_ROOT` now reads from `settings.site_url` instead of the literal `https://cloudista.org`; all downstream sitemap/RSS/JSON-LD URLs inherit the setting
+- `api/email_template.py` — imports `settings`; all post URLs in digest and immediate emails use `_SITE_URL = settings.site_url`; footer link also updated
+- `api/main.py` — CORS `allow_origins` derived from `settings.site_url` instead of hardcoded strings
+
+---
+
 ## [2026-03-25] — DRY tag/category query helper
 
 ### Changed
