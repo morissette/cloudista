@@ -44,12 +44,14 @@ jobs:
           else
             # Auto-detect from changed files
             CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "all")
-            if echo "$CHANGED" | grep -q "^api/"; then
-              if echo "$CHANGED" | grep -qvE "^api/"; then
-                echo "flag=" >> $GITHUB_OUTPUT   # both changed → full
-              else
-                echo "flag=--api" >> $GITHUB_OUTPUT
-              fi
+            API_CHANGED=false
+            SITE_CHANGED=false
+            echo "$CHANGED" | grep -q "^api/" && API_CHANGED=true
+            echo "$CHANGED" | grep -qE "^(site/|blog-site/|blog/|infra/|images/)" && SITE_CHANGED=true
+            if $API_CHANGED && $SITE_CHANGED; then
+              echo "flag=" >> $GITHUB_OUTPUT      # both changed → full
+            elif $API_CHANGED; then
+              echo "flag=--api" >> $GITHUB_OUTPUT
             else
               echo "flag=--site" >> $GITHUB_OUTPUT
             fi

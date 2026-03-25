@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — deploy always updates nginx
+
+### Fixed
+- `deploy.sh` — nginx config deployment moved out of the API-only guard; now runs in all deploy modes (`--site`, `--api`, full) so `infra/nginx-cloudista.conf` changes always take effect
+- `deploy.sh` — nginx `-t` config test runs before `reload`; deploy aborts if config is invalid, preventing a broken reload from taking down the site
+- `.github/workflows/deploy.yml` — auto-detect now recognises `infra/` changes as site-side; previously an `infra/`-only commit would not trigger nginx deployment
+
+---
+
 ## [2026-03-25] — pretty URL pagination + WebP nginx fix
 
 ### Changed
