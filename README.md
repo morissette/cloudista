@@ -237,18 +237,3 @@ Goal: reach first revenue by month 3. Strategy: grow organic search traffic → 
 | Confirmed subscribers | 50 | 200 |
 | Monthly page views | Baseline | 2,000 |
 | Revenue | $0 | First dollar |
-
----
-
-## Migrating from MySQL (one-time)
-
-If upgrading from an instance with the legacy MySQL subscriber database:
-
-```bash
-# Run once on the server while both DBs are accessible
-MYSQL_HOST=127.0.0.1 MYSQL_USER=cloudista_api MYSQL_PASSWORD=... \
-BLOG_DB_HOST=localhost BLOG_DB_PORT=5433 BLOG_DB_PASSWORD=... \
-python3 scripts/migrate_subscribers_to_pg.py
-```
-
-Safe to re-run — uses `ON CONFLICT DO NOTHING`. After verifying counts match, remove MySQL from the server.
