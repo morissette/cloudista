@@ -100,12 +100,12 @@ def build_verification_email(confirm_url: str, unsubscribe_url: str) -> tuple[st
 
               <!-- Body copy -->
               <p style="margin:0 0 14px;font-size:15.5px;color:#475569;line-height:1.75;">
-                Thanks for signing up — you're almost on the Cloudista early access list.
+                Thanks for subscribing — you're one click away from getting new posts
+                delivered straight to your inbox.
               </p>
               <p style="margin:0 0 32px;font-size:15.5px;color:#475569;line-height:1.75;">
-                Cloudista is your go-to resource for cloud tutorials, head-to-head tool
-                comparisons, and daily news across AWS, Azure, GCP, and the cloud-native
-                ecosystem. We'll notify you the moment we go live.
+                Cloudista covers cloud infrastructure, DevOps, and platform engineering
+                from the field — AWS, Azure, GCP, Kubernetes, and everything in between.
               </p>
 
               <!-- ── CTA button ── -->
@@ -202,11 +202,11 @@ def build_verification_email(confirm_url: str, unsubscribe_url: str) -> tuple[st
     text = f"""Confirm your Cloudista subscription
 =====================================
 
-Thanks for signing up — you're almost on the Cloudista early access list.
+Thanks for subscribing — you're one click away from getting new posts
+delivered straight to your inbox.
 
-Cloudista is your go-to resource for cloud tutorials, head-to-head tool
-comparisons, and daily news across AWS, Azure, GCP, and the cloud-native
-ecosystem. We'll notify you the moment we go live.
+Cloudista covers cloud infrastructure, DevOps, and platform engineering
+from the field — AWS, Azure, GCP, Kubernetes, and everything in between.
 
 Confirm your email by visiting this link:
 {confirm_url}
