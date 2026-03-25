@@ -10,6 +10,10 @@ Usage:
 """
 from __future__ import annotations  # enables tuple[...] hints on Python 3.8
 
+from config import settings
+
+_SITE_URL = settings.site_url
+
 
 def build_verification_email(confirm_url: str, unsubscribe_url: str, prefs_url: str = "") -> tuple[str, str, str]:
     """Return (subject, html_body, text_body)."""
@@ -179,7 +183,7 @@ def build_verification_email(confirm_url: str, unsubscribe_url: str, prefs_url: 
 
               <p style="margin:0 0 6px;font-size:12px;color:#94a3b8;line-height:1.65;">
                 You received this email because someone signed up at
-                <a href="https://cloudista.org"
+                <a href="{_SITE_URL}"
                    style="color:#64748b;text-decoration:none;">cloudista.org</a>.
                 If that wasn't you, you can safely ignore this email or
                 <a href="{unsubscribe_url}"
@@ -361,7 +365,7 @@ def build_digest_email(
     # Build post cards for HTML
     cards_html = ""
     for i, post in enumerate(posts):
-        post_url = f"https://cloudista.org/blog/{post['slug']}"
+        post_url = f"{_SITE_URL}/blog/{post['slug']}"
         excerpt = post.get("excerpt") or ""
         if i > 0:
             cards_html += '<hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0;">\n'
@@ -391,7 +395,7 @@ def build_digest_email(
     # Plain text
     text_lines = [subject, "=" * len(subject), ""]
     for post in posts:
-        post_url = f"https://cloudista.org/blog/{post['slug']}"
+        post_url = f"{_SITE_URL}/blog/{post['slug']}"
         excerpt = post.get("excerpt") or ""
         text_lines.append(post["title"])
         text_lines.append(post_url)
@@ -412,7 +416,7 @@ def build_immediate_email(
     post dict must have keys: title, slug, excerpt, image_url, published_at (datetime).
     """
     subject = f"New on Cloudista: {post['title']}"
-    post_url = f"https://cloudista.org/blog/{post['slug']}"
+    post_url = f"{_SITE_URL}/blog/{post['slug']}"
     excerpt = post.get("excerpt") or ""
 
     body_html = f"""

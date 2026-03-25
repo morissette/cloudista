@@ -353,7 +353,7 @@ async def list_categories(response: Response, conn: asyncpg.Connection = Depends
 
 # ── Sitemap ────────────────────────────────────────────────────────────────────
 
-_SITE_ROOT = "https://cloudista.org"
+_SITE_ROOT = settings.site_url
 
 _SITEMAP_STATIC = [
     {"loc": f"{_SITE_ROOT}/", "priority": "1.0", "changefreq": "daily"},
@@ -645,8 +645,8 @@ def _render_post_html(row: dict, tags: list, categories: list) -> str:
     credit = row.get("image_credit") or ""
     pub = row.get("published_at")
 
-    post_url = f"https://cloudista.org/blog/{slug}"
-    og_image = image if image else "https://cloudista.org/og-image.png"
+    post_url = f"{_SITE_ROOT}/blog/{slug}"
+    og_image = image if image else f"{_SITE_ROOT}/og-image.png"
 
     pub_date = pub.strftime("%Y-%m-%d") if pub else ""
     pub_date_display = f"{pub.strftime('%B')} {pub.day}, {pub.year}" if pub else ""
@@ -664,7 +664,7 @@ def _render_post_html(row: dict, tags: list, categories: list) -> str:
             "publisher": {
                 "@type": "Organization",
                 "name": "Cloudista",
-                "url": "https://cloudista.org",
+                "url": _SITE_ROOT,
             },
         },
         ensure_ascii=False,

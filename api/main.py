@@ -95,8 +95,8 @@ app.include_router(blog_html_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://cloudista.org",
-        "https://www.cloudista.org",
+        settings.site_url,
+        f"https://www.{settings.site_url.removeprefix('https://')}",
     ],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type"],
