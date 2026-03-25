@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — fix ruff E402 lint in localize_images.py
+
+### Fixed
+- `scripts/localize_images.py` — moved module docstring before `from __future__ import annotations`; ruff was flagging E402 (module-level import not at top of file) because the docstring sat between the `__future__` import and the stdlib imports
+
+---
+
 ## [2026-03-25] — deploy-time cache busting for blog.js
 
 ### Changed

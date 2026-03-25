@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """
 Download external (CDN) post images to /www/cloudista.org/images/posts/ and
 update the DB to use the local path.
@@ -17,6 +15,8 @@ Options:
     --images-dir  Override the local images directory (default: /www/cloudista.org/images/posts)
     --fix-ext     Rename misnamed files (e.g. WebP saved as .jpg) and update DB
 """
+
+from __future__ import annotations
 
 import argparse
 import logging
