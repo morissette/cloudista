@@ -198,15 +198,23 @@ def import_posts(blog_dir: Path, dsn: str, dry_run: bool = False):
                         " FROM posts WHERE id = %s",
                         (post_id,),
                     )
+                # Only overwrite image_url if the .txt file has an explicit Image:
+                # field. Preserves images set by populate_images.py or post-image skill.
+                image_sql = (
+                    "image_url = %s,"
+                    if post["image_url"] is not None
+                    else ""
+                )
+                image_params = (post["image_url"],) if post["image_url"] is not None else ()
                 cur.execute(
-                    """
+                    f"""
                     UPDATE posts SET
                         title        = %s,
                         content_md   = %s,
                         content_html = %s,
                         excerpt      = %s,
                         original_url = %s,
-                        image_url    = %s,
+                        {image_sql}
                         published_at = %s,
                         status       = %s,
                         updated_at   = NOW()
@@ -218,7 +226,7 @@ def import_posts(blog_dir: Path, dsn: str, dry_run: bool = False):
                         post["content_html"],
                         post["excerpt"],
                         post["original_url"],
-                        post["image_url"],
+                        *image_params,
                         post["published_at"],
                         post["status"],
                         post_id,
