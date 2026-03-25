@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 """
 Download external (CDN) post images to /www/cloudista.org/images/posts/ and
 update the DB to use the local path.
