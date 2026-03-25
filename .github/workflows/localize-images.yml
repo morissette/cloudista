@@ -1,0 +1,99 @@
+---
+name: Localize Post Images
+
+"on":
+  workflow_dispatch:
+    inputs:
+      slug:
+        description: "Target a single post by slug (leave blank for all)"
+        required: false
+        default: ""
+      populate_first:
+        description: "Run populate_images.py first to fill any null image_urls"
+        type: boolean
+        default: true
+      dry_run:
+        description: "Dry run — print what would happen without making changes"
+        type: boolean
+        default: false
+
+jobs:
+  localize:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install psycopg2-binary requests
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Open SSH tunnel to blog DB
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -L 5433:localhost:5433 \
+              -N -f \
+              "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
+          echo "Tunnel established on localhost:5433"
+
+      - name: Fill missing image_urls (populate_images.py)
+        if: ${{ inputs.populate_first == true }}
+        env:
+          INPUT_SLUG: ${{ inputs.slug }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+          PEXELS_ACCESS_KEY: ${{ secrets.PEXELS_ACCESS_KEY }}
+          POPULATE_DB_DSN: >-
+            postgresql://cloudista:${{ secrets.BLOG_DB_PASSWORD }}@localhost:5433/cloudista
+        run: |
+          ARGS="--limit 0"
+          if [ -n "$INPUT_SLUG" ]; then
+            ARGS="$ARGS --slug $INPUT_SLUG"
+          fi
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          cd blog
+          python3 populate_images.py $ARGS
+
+      - name: Localize images to server disk
+        env:
+          INPUT_SLUG: ${{ inputs.slug }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          # Copy script to server and run it there so images download directly
+          # to /www/cloudista.org/images/posts/ without routing through the runner.
+          scp -i ~/.ssh/deploy_key \
+            scripts/localize_images.py \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/localize_images.py"
+
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash << REMOTE
+          pip3 install psycopg2-binary --quiet 2>/dev/null || true
+          DB_PASS=\$(grep BLOG_DB_PASSWORD /www/cloudista.org/api/.env | cut -d= -f2)
+
+          ARGS=""
+          if [ -n "${INPUT_SLUG}" ]; then
+            ARGS="\$ARGS --slug ${INPUT_SLUG}"
+          fi
+          if [ "${INPUT_DRY_RUN}" = "true" ]; then
+            ARGS="\$ARGS --dry-run"
+          fi
+
+          POPULATE_DB_DSN="postgresql://cloudista:\${DB_PASS}@localhost:5433/cloudista" \
+            python3 /tmp/localize_images.py \$ARGS
+          REMOTE
