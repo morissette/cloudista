@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — deploy-time cache busting for blog.js
+
+### Changed
+- `blog-site/index.html`, `blog-site/post.html` — `blog.js` script tag now uses `?v=__DEPLOY_HASH__` placeholder
+- `deploy.sh` — substitutes `__DEPLOY_HASH__` with `git rev-parse --short HEAD` via `sed` before SCP on every deploy; ensures browsers load the latest `blog.js` after each release rather than serving a 7-day cached version
+
+---
+
 ## [2026-03-25] — fix pagination race condition
 
 ### Fixed

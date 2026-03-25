@@ -63,9 +63,13 @@ if [[ "$MODE" != "--api" ]]; then
 
   step "Deploying blog static files..."
   ssh_cmd "sudo mkdir -p $REMOTE_WEB/blog && sudo chown ec2-user:ec2-user $REMOTE_WEB/blog"
-  scp_file blog-site/index.html blog-site/post.html blog-site/blog.js "$SSH_HOST:/tmp/"
-  ssh_cmd "sudo mv /tmp/index.html /tmp/post.html /tmp/blog.js $REMOTE_WEB/blog/"
-  ok "blog pages uploaded"
+  # Inject git hash into HTML so browsers bust the cache on each deploy
+  DEPLOY_HASH=$(git rev-parse --short HEAD)
+  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" blog-site/index.html > /tmp/blog-index.html
+  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" blog-site/post.html  > /tmp/blog-post.html
+  scp_file /tmp/blog-index.html /tmp/blog-post.html blog-site/blog.js "$SSH_HOST:/tmp/"
+  ssh_cmd "sudo mv /tmp/blog-index.html $REMOTE_WEB/blog/index.html && sudo mv /tmp/blog-post.html $REMOTE_WEB/blog/post.html && sudo mv /tmp/blog.js $REMOTE_WEB/blog/blog.js"
+  ok "blog pages uploaded (deploy hash: ${DEPLOY_HASH})"
 fi
 
 # ---------------------------------------------------------------------------
