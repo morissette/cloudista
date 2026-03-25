@@ -659,7 +659,7 @@ def _render_post_html(row: dict, tags: list, categories: list) -> str:
 
     if image:
         credit_html = (
-            f'<p class="post-hero__credit" id="post-hero-credit">{e(credit)}</p>'
+            f'<p class="post-hero__credit" id="post-hero-credit">{credit}</p>'
             if credit
             else ""
         )
