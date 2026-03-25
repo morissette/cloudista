@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — deploy rollback on health check failure
+
+### Changed
+- `deploy.sh` — captures previous container image ID before building; if health check fails, automatically restarts the previous image before exiting 1; if no prior image exists, prints instructions and exits 1
+
+---
+
 ## [2026-03-25] — extract shared email HTML wrapper
 
 ### Changed
