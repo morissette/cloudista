@@ -73,30 +73,38 @@ if (listingEl) {
 
   // ── URL state helpers ─────────────────────────────────────────
   function getUrlState() {
-    const p = new URLSearchParams(location.search);
-    // Support /blog/3 path-based pagination
-    const pathMatch = location.pathname.match(/^\/blog\/(\d+)\/?$/);
+    const p    = new URLSearchParams(location.search);
+    const path = location.pathname;
+    // /page/3  or  /category/aws/page/3
+    const pageMatch = path.match(/\/page\/(\d+)\/?$/);
+    // /category/aws  or  /category/aws/page/3
+    const catMatch  = path.match(/^\/category\/([^/]+)/);
     return {
-      page:     pathMatch ? parseInt(pathMatch[1], 10) : (parseInt(p.get('page'), 10) || 1),
-      category: p.get('category') || null,
+      page:     pageMatch ? parseInt(pageMatch[1], 10) : (parseInt(p.get('page'), 10) || 1),
+      category: catMatch  ? catMatch[1]                : (p.get('category') || null),
       q:        p.get('q') || '',
     };
   }
 
   function pushUrlState(page, category, q) {
-    const p = new URLSearchParams();
-    if (category) p.set('category', category);
-    if (q)        p.set('q', q);
-    const isRoot = !location.pathname.startsWith('/blog');
-    if (isRoot) {
+    if (q) {
+      // Search results: keep as query param (ephemeral, not meant to be bookmarked)
+      const p = new URLSearchParams({ q });
       if (page > 1) p.set('page', page);
-      const qs = p.toString();
-      history.replaceState(null, '', qs ? `/?${qs}` : '/');
-    } else {
-      const qs       = p.toString();
-      const basePath = page > 1 ? `/blog/${page}` : '/blog/';
-      history.replaceState(null, '', qs ? `${basePath}?${qs}` : basePath);
+      history.replaceState(null, '', `/?${p}`);
+      return;
     }
+    let path;
+    if (category && page > 1) {
+      path = `/category/${category}/page/${page}`;
+    } else if (category) {
+      path = `/category/${category}`;
+    } else if (page > 1) {
+      path = `/page/${page}`;
+    } else {
+      path = '/';
+    }
+    history.replaceState(null, '', path);
   }
 
   // ── Pagination helper ─────────────────────────────────────────
@@ -425,7 +433,7 @@ if (postContentEl) {
   const backEl = document.querySelector('.post-back');
   if (backEl) {
     const savedPage = parseInt(sessionStorage.getItem('blogListingPage'), 10);
-    if (savedPage > 1) backEl.href = `/?page=${savedPage}`;
+    if (savedPage > 1) backEl.href = `/page/${savedPage}`;
   }
 
   if (postContentEl.dataset.prerendered) {

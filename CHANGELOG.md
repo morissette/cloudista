@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — pretty URL pagination + WebP nginx fix
+
+### Changed
+- `blog-site/blog.js` — pagination and category filter now use pretty paths: `/page/3`, `/category/aws`, `/category/aws/page/3`; query params (`?page=`, `?category=`) still read as fallback for back-compat
+- `infra/nginx-cloudista.conf` — added location blocks for `/page/N`, `/category/slug`, `/category/slug/page/N` (all serve `index.html`); updated `/blog/N` redirect target from `/?page=N` to `/page/N`
+- `infra/nginx-cloudista.conf` — WebP content negotiation: replaced `if`+`rewrite` with `try_files` so nginx checks for `.webp` file existence before serving, preventing 404s when no `.webp` variant exists
+
+---
+
 ## [2026-03-25] — image localization + import fix
 
 ### Added
