@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — fix pagination race condition
+
+### Fixed
+- `blog-site/blog.js` — navigating from a paginated category (e.g. `/category/kubernetes/page/3`) to a different category (e.g. `/category/chatops`) would show stale pagination from the previous request; the slow in-flight request for the old category landed after the new one and overwrote the correct state
+- Root cause: `activeCategory` was read from outer scope at response time, not at request time; a late response could call `updatePagination` and `pushUrlState` with wrong data
+- Fix: capture `activeCategory` (and `searchQuery`) as local snapshots when each fetch is initiated; add `AbortController` so superseded requests are cancelled immediately; `AbortError` is caught and discarded silently
+
+---
+
 ## [2026-03-25] — deploy always updates nginx
 
 ### Fixed
