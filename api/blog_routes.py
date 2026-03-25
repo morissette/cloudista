@@ -344,8 +344,7 @@ async def list_categories(response: Response, conn: asyncpg.Connection = Depends
 _SITE_ROOT = "https://cloudista.org"
 
 _SITEMAP_STATIC = [
-    {"loc": f"{_SITE_ROOT}/", "priority": "1.0", "changefreq": "weekly"},
-    {"loc": f"{_SITE_ROOT}/blog/", "priority": "0.9", "changefreq": "daily"},
+    {"loc": f"{_SITE_ROOT}/", "priority": "1.0", "changefreq": "daily"},
 ]
 
 

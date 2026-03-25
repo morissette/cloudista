@@ -87,9 +87,16 @@ if (listingEl) {
     const p = new URLSearchParams();
     if (category) p.set('category', category);
     if (q)        p.set('q', q);
-    const qs       = p.toString();
-    const basePath = page > 1 ? `/blog/${page}` : '/blog/';
-    history.replaceState(null, '', qs ? `${basePath}?${qs}` : basePath);
+    const isRoot = !location.pathname.startsWith('/blog');
+    if (isRoot) {
+      if (page > 1) p.set('page', page);
+      const qs = p.toString();
+      history.replaceState(null, '', qs ? `/?${qs}` : '/');
+    } else {
+      const qs       = p.toString();
+      const basePath = page > 1 ? `/blog/${page}` : '/blog/';
+      history.replaceState(null, '', qs ? `${basePath}?${qs}` : basePath);
+    }
   }
 
   // ── Pagination helper ─────────────────────────────────────────
@@ -418,7 +425,7 @@ if (postContentEl) {
   const backEl = document.querySelector('.post-back');
   if (backEl) {
     const savedPage = parseInt(sessionStorage.getItem('blogListingPage'), 10);
-    if (savedPage > 1) backEl.href = `/blog/${savedPage}`;
+    if (savedPage > 1) backEl.href = `/?page=${savedPage}`;
   }
 
   if (postContentEl.dataset.prerendered) {
