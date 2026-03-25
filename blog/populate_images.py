@@ -169,6 +169,8 @@ KEYWORD_MAP = [
      "distributed systems architecture"),
     (r"ipam|solarwind|network.manag",
      "network infrastructure management"),
+    (r"sprint.routine|calendar.disciplin|calendar.plan|sprint.plan|daily.routine|carpal.tunnel|self.care|rest.and",
+     "calendar planner desk routine"),
     (r"custom.command|slash.command|productivity|workflow.automat",
      "productivity workflow automation"),
 
