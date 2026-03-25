@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — extract shared email HTML wrapper
+
+### Changed
+- `api/email_template.py` — `build_verification_email` now uses `_email_html_wrapper` (shared with digest/immediate emails) instead of its own copy of the full HTML shell; added `_email_verification_footer_html` for the signup-attribution footer variant; eliminates ~100 lines of duplicated outer HTML
+
+---
+
 ## [2026-03-25] — replace hardcoded site URL with settings.site_url
 
 ### Changed
