@@ -6,6 +6,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — fix ruff E402 lint in localize_images.py
+
+### Fixed
+- `scripts/localize_images.py` — moved module docstring before `from __future__ import annotations`; ruff was flagging E402 (module-level import not at top of file) because the docstring sat between the `__future__` import and the stdlib imports
+
+---
+
+## [2026-03-25] — deploy-time cache busting for blog.js
+
+### Changed
+- `blog-site/index.html`, `blog-site/post.html` — `blog.js` script tag now uses `?v=__DEPLOY_HASH__` placeholder
+- `deploy.sh` — substitutes `__DEPLOY_HASH__` with `git rev-parse --short HEAD` via `sed` before SCP on every deploy; ensures browsers load the latest `blog.js` after each release rather than serving a 7-day cached version
+
+---
+
 ## [2026-03-25] — fix pagination race condition
 
 ### Fixed
@@ -183,3 +198,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_subscribers_prefs_token ON subscribers (pr
 - nginx config, PostgreSQL schema, Docker setup
 - GitHub remote at `github.com/morissette/cloudista`
 - `.github/workflows/deploy.yml` — CI/CD on push to `main`
+
