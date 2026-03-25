@@ -31,11 +31,11 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.x509 import load_pem_x509_certificate
 from dependencies import _real_ip, close_pool, get_pg_conn, init_pool, limiter
-from email_template import build_verification_email
+from email_template import build_digest_email, build_immediate_email, build_verification_email
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
-from schemas import HealthOut, MessageOut, SubscribeIn
+from schemas import HealthOut, MessageOut, PreferencesIn, SubscribeIn
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -52,6 +52,7 @@ log = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 _TOKEN_TTL = timedelta(hours=72)
+_PREFS_TOKEN_TTL = timedelta(days=365)
 
 # Simple in-process SNS cert cache (keyed by URL; certs are long-lived)
 _SNS_CERT_CACHE: dict[str, bytes] = {}
@@ -152,14 +153,15 @@ async def _verify_turnstile(token: str, ip: str) -> TurnstileResult:
     return await asyncio.to_thread(_verify_turnstile_sync, token, ip)
 
 
-def _send_verification(email: str, token: str) -> None:
+def _send_verification(email: str, token: str, prefs_token: str = "") -> None:
     """
     Send a verification email via AWS SES.
     Raises on failure so the caller can decide whether to propagate.
     """
     confirm_url = f"{settings.confirm_base_url}/{token}"
     unsubscribe_url = f"{settings.site_url}/api/unsubscribe/{token}"
-    subject, html, text = build_verification_email(confirm_url, unsubscribe_url)
+    prefs_url = f"{settings.site_url}/api/preferences/{prefs_token}" if prefs_token else ""
+    subject, html, text = build_verification_email(confirm_url, unsubscribe_url, prefs_url)
 
     _ses.send_email(
         Source=settings.from_email,
@@ -175,10 +177,10 @@ def _send_verification(email: str, token: str) -> None:
     log.info("Verification email sent → %s", email)
 
 
-async def _try_send_verification(email: str, token: str) -> None:
+async def _try_send_verification(email: str, token: str, prefs_token: str = "") -> None:
     """Send verification email; log but don't raise on SES failure."""
     try:
-        await asyncio.to_thread(_send_verification, email, token)
+        await asyncio.to_thread(_send_verification, email, token, prefs_token)
     except (BotoCoreError, ClientError) as exc:
         log.error("SES send failed for %s: %s", email, exc)
 
@@ -240,6 +242,83 @@ def _verify_sns_signature(body: dict) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Helpers — HTML responses
+# ---------------------------------------------------------------------------
+
+def _prefs_html_response(email: str, frequency: str, token: str, saved: str = "", error: str = "") -> Response:
+    """Render the subscriber preferences HTML page."""
+    from fastapi.responses import HTMLResponse
+    site = settings.site_url
+
+    weekly_active = "background:#2563eb;color:#fff;" if frequency == "weekly" else "background:#f1f5f9;color:#0f172a;"
+    immediate_active = "background:#2563eb;color:#fff;" if frequency == "immediate" else "background:#f1f5f9;color:#0f172a;"
+
+    saved_html = '<p style="color:#16a34a;font-weight:600;margin:0 0 16px;">✓ Preferences saved.</p>' if saved else ""
+    error_html = f'<p style="color:#dc2626;margin:0 0 16px;">{error}</p>' if error else ""
+    form_html = "" if error else f"""
+      <form method="post" style="margin:0;">
+        <p style="margin:0 0 12px;font-size:14px;color:#64748b;">How often would you like to hear from us?</p>
+        <div style="display:flex;gap:10px;margin-bottom:24px;">
+          <button name="frequency" value="weekly"
+                  style="flex:1;padding:12px;border-radius:8px;border:1.5px solid #2563eb;
+                         cursor:pointer;font-size:14px;font-weight:600;{weekly_active}">
+            Weekly digest
+          </button>
+          <button name="frequency" value="immediate"
+                  style="flex:1;padding:12px;border-radius:8px;border:1.5px solid #2563eb;
+                         cursor:pointer;font-size:14px;font-weight:600;{immediate_active}">
+            Every new post
+          </button>
+        </div>
+      </form>
+      <p style="margin:0;font-size:12px;color:#94a3b8;">
+        To unsubscribe entirely, <a href="{site}/?unsubscribe=1" style="color:#64748b;">visit cloudista.org</a>
+        and use the unsubscribe link from any email.
+      </p>
+    """
+
+    masked = email[:2] + "***" + email[email.find("@"):] if "@" in email else ""
+    title_text = "Email preferences" if not error else "Link not found"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email preferences — Cloudista</title>
+</head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f1f5f9;min-height:100vh;">
+    <tr>
+      <td align="center" valign="top" style="padding:48px 16px;">
+        <table cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:480px;">
+          <tr>
+            <td style="border-radius:14px 14px 0 0;background:linear-gradient(135deg,#2563eb 0%,#4f46e5 50%,#7c3aed 100%);padding:28px 36px;text-align:center;">
+              <a href="{site}" style="text-decoration:none;color:#fff;font-size:18px;font-weight:800;letter-spacing:-0.03em;">&#9729; Cloudista</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#fff;padding:36px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
+              <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.03em;">{title_text}</h1>
+              {"" if error else f'<p style="margin:0 0 20px;font-size:14px;color:#64748b;">{masked}</p>'}
+              {saved_html}{error_html}{form_html}
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 14px 14px;padding:16px 36px;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#94a3b8;">&copy; 2026 Cloudista</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -296,12 +375,13 @@ async def subscribe(
                 raise HTTPException(status_code=400, detail="CAPTCHA verification failed.")
 
     send_token: str | None = None
+    send_prefs_token: str = ""
     resend_msg: str | None = None  # None signals new insert (→ 201)
 
     try:
         async with conn.transaction():
             row = await conn.fetchrow(
-                "SELECT id, status, token, token_expires_at FROM subscribers WHERE email = $1 LIMIT 1",
+                "SELECT id, status, token, token_expires_at, prefs_token FROM subscribers WHERE email = $1 LIMIT 1",
                 body.email,
             )
 
@@ -312,39 +392,55 @@ async def subscribe(
 
                 if row["status"] == "unsubscribed":
                     t = _make_token(body.email)
+                    pt = _make_token(body.email + "prefs")
                     await conn.execute(
                         "UPDATE subscribers SET status='pending', token=$1, token_expires_at=$2,"
-                        " confirmed_at=NULL, unsubscribed_at=NULL WHERE id=$3",
+                        " confirmed_at=NULL, unsubscribed_at=NULL,"
+                        " prefs_token=$3, prefs_token_expires_at=$4 WHERE id=$5",
                         t,
                         datetime.now(timezone.utc) + _TOKEN_TTL,
+                        pt,
+                        datetime.now(timezone.utc) + _PREFS_TOKEN_TTL,
                         row["id"],
                     )
                     send_token = t
+                    send_prefs_token = pt
                     resend_msg = "Re-subscribed — check your email."
                 else:
                     # pending — always rotate token on resend so old links are invalidated
                     t = _make_token(body.email)
+                    pt = _make_token(body.email + "prefs")
                     await conn.execute(
-                        "UPDATE subscribers SET token=$1, token_expires_at=$2 WHERE id=$3",
+                        "UPDATE subscribers SET token=$1, token_expires_at=$2,"
+                        " prefs_token=$3, prefs_token_expires_at=$4 WHERE id=$5",
                         t,
                         datetime.now(timezone.utc) + _TOKEN_TTL,
+                        pt,
+                        datetime.now(timezone.utc) + _PREFS_TOKEN_TTL,
                         row["id"],
                     )
                     send_token = t
+                    send_prefs_token = pt
                     resend_msg = "Confirmation email resent."
             else:
                 t = _make_token(body.email)
+                pt = _make_token(body.email + "prefs")
                 await conn.execute(
-                    """INSERT INTO subscribers (email, source, token, token_expires_at, ip_address, user_agent)
-                       VALUES ($1, $2, $3, $4, $5, $6)""",
+                    """INSERT INTO subscribers
+                       (email, source, token, token_expires_at, ip_address, user_agent,
+                        prefs_token, prefs_token_expires_at)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
                     body.email,
                     body.source,
                     t,
                     datetime.now(timezone.utc) + _TOKEN_TTL,
                     ip,
                     ua,
+                    pt,
+                    datetime.now(timezone.utc) + _PREFS_TOKEN_TTL,
                 )
                 send_token = t
+                send_prefs_token = pt
                 # resend_msg stays None → caller sets 201
 
     except asyncpg.UniqueViolationError as exc:
@@ -361,7 +457,7 @@ async def subscribe(
 
     assert send_token is not None  # noqa: S101 — all non-early-return paths set send_token
 
-    await _try_send_verification(body.email, send_token)
+    await _try_send_verification(body.email, send_token, send_prefs_token)
 
     if resend_msg is None:
         # status_code=201 from decorator — new subscriber created
@@ -433,6 +529,65 @@ async def unsubscribe_subscriber(token: str, conn: asyncpg.Connection = Depends(
     except Exception as exc:
         log.error("unsubscribe error: %s", exc)
         return RedirectResponse(url=f"{settings.site_url}/?unsubscribed=error", status_code=302)
+
+
+@app.get("/api/preferences/{token}", include_in_schema=False)
+async def preferences_page(token: str, saved: str = "", conn: asyncpg.Connection = Depends(get_pg_conn)):
+    """Subscriber preferences page — frequency toggle via one-time link."""
+    try:
+        row = await conn.fetchrow(
+            "SELECT id, email, frequency, token, prefs_token_expires_at"
+            " FROM subscribers WHERE prefs_token = $1 AND status = 'confirmed' LIMIT 1",
+            token,
+        )
+    except Exception as exc:
+        log.error("preferences_page error: %s", exc)
+        row = None
+
+    if not row:
+        return _prefs_html_response("", "weekly", token, error="Link not found or already unsubscribed.")
+
+    # Auto-rotate expired token — generate a new one, update DB, redirect transparently
+    if (
+        row["prefs_token_expires_at"] is not None
+        and row["prefs_token_expires_at"] < datetime.now(timezone.utc)
+    ):
+        new_pt = _make_token(row["email"] + "prefs")
+        try:
+            await conn.execute(
+                "UPDATE subscribers SET prefs_token = $1, prefs_token_expires_at = $2 WHERE id = $3",
+                new_pt,
+                datetime.now(timezone.utc) + _PREFS_TOKEN_TTL,
+                row["id"],
+            )
+        except Exception as exc:
+            log.error("prefs token rotate error: %s", exc)
+            return _prefs_html_response("", "weekly", token, error="Link expired. Check your most recent email for a new preferences link.")
+        return RedirectResponse(
+            url=f"{settings.site_url}/api/preferences/{new_pt}",
+            status_code=302,
+        )
+
+    return _prefs_html_response(row["email"], row["frequency"], token, saved=saved)
+
+
+@app.post("/api/preferences/{token}", include_in_schema=False)
+async def update_preferences(token: str, body: PreferencesIn, conn: asyncpg.Connection = Depends(get_pg_conn)):
+    """Save subscriber frequency preference."""
+    try:
+        result = await conn.execute(
+            "UPDATE subscribers SET frequency = $1 WHERE prefs_token = $2 AND status = 'confirmed'",
+            body.frequency, token,
+        )
+        if result == "UPDATE 0":
+            raise HTTPException(status_code=404, detail="Subscriber not found.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("update_preferences error: %s", exc)
+        raise HTTPException(status_code=500, detail="Could not save preferences.")
+
+    return RedirectResponse(url=f"{settings.site_url}/api/preferences/{token}?saved=1", status_code=303)
 
 
 @app.post("/api/ses-webhook", include_in_schema=False)

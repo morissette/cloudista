@@ -66,3 +66,7 @@ class PostRevisionOut(BaseModel):
     title: str
     excerpt: str | None
     revised_at: datetime
+
+
+class PreferencesIn(BaseModel):
+    frequency: Literal["weekly", "immediate"]

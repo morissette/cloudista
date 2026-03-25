@@ -1,0 +1,60 @@
+---
+name: Notify Subscribers (Weekly Digest)
+
+"on":
+  schedule:
+    - cron: "0 14 * * 0"    # Sundays at 14:00 UTC (9 AM ET / 10 AM EDT)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — log what would be sent without sending"
+        type: boolean
+        default: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy notify script and email template
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            blog/notify_subscribers.py \
+            api/email_template.py \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/
+
+      - name: Build args
+        id: args
+        env:
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          ARGS=""
+          if [ "${INPUT_DRY_RUN}" = "true" ]; then
+            ARGS="--dry-run"
+          fi
+          echo "flags=$ARGS" >> "$GITHUB_OUTPUT"
+
+      - name: Run weekly digest
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} bash << 'REMOTE'
+          pip3 install psycopg2-binary boto3 --quiet 2>/dev/null || true
+          DB_PASS=$(grep BLOG_DB_PASSWORD /www/cloudista.org/api/.env | cut -d= -f2)
+          cd /tmp
+          POPULATE_DB_DSN="postgresql://cloudista:${DB_PASS}@localhost:5433/cloudista" \
+          FROM_EMAIL="noreply@cloudista.org" \
+          AWS_REGION="us-east-1" \
+          SITE_URL="https://cloudista.org" \
+            python3 notify_subscribers.py --mode digest ${{ steps.args.outputs.flags }} 2>&1
+          REMOTE

@@ -423,6 +423,69 @@ class TestRateLimiting:
 
 
 # ---------------------------------------------------------------------------
+# Preferences
+# ---------------------------------------------------------------------------
+
+class TestPreferences:
+    def test_get_valid_token_returns_200(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=_prefs_row())
+
+        resp = c.get("/api/preferences/validprefstoken")
+        assert resp.status_code == 200
+        assert "preferences" in resp.text.lower()
+
+    def test_get_unknown_token_returns_error_page(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=None)
+
+        resp = c.get("/api/preferences/badtoken")
+        assert resp.status_code == 200  # HTML page, not 404
+        assert "not found" in resp.text.lower()
+
+    def test_post_valid_frequency_redirects(self, client):
+        c, conn = client
+        conn.execute = AsyncMock(return_value="UPDATE 1")
+
+        resp = c.post(
+            "/api/preferences/validtoken",
+            json={"frequency": "immediate"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "saved=1" in resp.headers["location"]
+
+    def test_post_weekly_frequency_redirects(self, client):
+        c, conn = client
+        conn.execute = AsyncMock(return_value="UPDATE 1")
+
+        resp = c.post(
+            "/api/preferences/validtoken",
+            json={"frequency": "weekly"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+
+    def test_post_invalid_frequency_returns_422(self, client):
+        c, _ = client
+        resp = c.post(
+            "/api/preferences/validtoken",
+            json={"frequency": "never"},
+        )
+        assert resp.status_code == 422
+
+    def test_post_not_found_returns_404(self, client):
+        c, conn = client
+        conn.execute = AsyncMock(return_value="UPDATE 0")
+
+        resp = c.post(
+            "/api/preferences/unknowntoken",
+            json={"frequency": "weekly"},
+        )
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -433,6 +496,20 @@ def _row(**kwargs):
         "status": "pending",
         "token": "abc123def456",
         "token_expires_at": None,
+        "prefs_token": "prefstoken123",
+    }
+    defaults.update(kwargs)
+    return defaults
+
+
+def _prefs_row(**kwargs):
+    from datetime import datetime, timedelta, timezone
+    defaults = {
+        "id": 1,
+        "email": "test@example.com",
+        "frequency": "weekly",
+        "token": "abc123def456",
+        "prefs_token_expires_at": datetime.now(timezone.utc) + timedelta(days=365),
     }
     defaults.update(kwargs)
     return defaults
