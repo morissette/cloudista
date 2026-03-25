@@ -31,7 +31,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.x509 import load_pem_x509_certificate
 from dependencies import _real_ip, close_pool, get_pg_conn, init_pool, limiter
-from email_template import build_digest_email, build_immediate_email, build_verification_email
+from email_template import build_verification_email
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -251,7 +251,10 @@ def _prefs_html_response(email: str, frequency: str, token: str, saved: str = ""
     site = settings.site_url
 
     weekly_active = "background:#2563eb;color:#fff;" if frequency == "weekly" else "background:#f1f5f9;color:#0f172a;"
-    immediate_active = "background:#2563eb;color:#fff;" if frequency == "immediate" else "background:#f1f5f9;color:#0f172a;"
+    immediate_active = (
+        "background:#2563eb;color:#fff;" if frequency == "immediate"
+        else "background:#f1f5f9;color:#0f172a;"
+    )
 
     saved_html = '<p style="color:#16a34a;font-weight:600;margin:0 0 16px;">✓ Preferences saved.</p>' if saved else ""
     error_html = f'<p style="color:#dc2626;margin:0 0 16px;">{error}</p>' if error else ""
@@ -293,19 +296,26 @@ def _prefs_html_response(email: str, frequency: str, token: str, saved: str = ""
       <td align="center" valign="top" style="padding:48px 16px;">
         <table cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:480px;">
           <tr>
-            <td style="border-radius:14px 14px 0 0;background:linear-gradient(135deg,#2563eb 0%,#4f46e5 50%,#7c3aed 100%);padding:28px 36px;text-align:center;">
-              <a href="{site}" style="text-decoration:none;color:#fff;font-size:18px;font-weight:800;letter-spacing:-0.03em;">&#9729; Cloudista</a>
+            <td style="border-radius:14px 14px 0 0;
+                       background:linear-gradient(135deg,#2563eb 0%,#4f46e5 50%,#7c3aed 100%);
+                       padding:28px 36px;text-align:center;">
+              <a href="{site}"
+                 style="text-decoration:none;color:#fff;font-size:18px;
+                        font-weight:800;letter-spacing:-0.03em;">&#9729; Cloudista</a>
             </td>
           </tr>
           <tr>
             <td style="background:#fff;padding:36px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
-              <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.03em;">{title_text}</h1>
+              <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;
+                         color:#0f172a;letter-spacing:-0.03em;">{title_text}</h1>
               {"" if error else f'<p style="margin:0 0 20px;font-size:14px;color:#64748b;">{masked}</p>'}
               {saved_html}{error_html}{form_html}
             </td>
           </tr>
           <tr>
-            <td style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 14px 14px;padding:16px 36px;text-align:center;">
+            <td style="background:#f8fafc;border:1px solid #e2e8f0;
+                       border-top:none;border-radius:0 0 14px 14px;
+                       padding:16px 36px;text-align:center;">
               <p style="margin:0;font-size:12px;color:#94a3b8;">&copy; 2026 Cloudista</p>
             </td>
           </tr>
@@ -562,7 +572,10 @@ async def preferences_page(token: str, saved: str = "", conn: asyncpg.Connection
             )
         except Exception as exc:
             log.error("prefs token rotate error: %s", exc)
-            return _prefs_html_response("", "weekly", token, error="Link expired. Check your most recent email for a new preferences link.")
+            return _prefs_html_response(
+                "", "weekly", token,
+                error="Link expired. Check your most recent email for a new preferences link.",
+            )
         return RedirectResponse(
             url=f"{settings.site_url}/api/preferences/{new_pt}",
             status_code=302,

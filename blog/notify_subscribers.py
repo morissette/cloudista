@@ -16,13 +16,10 @@ Usage:
 import argparse
 import logging
 import os
-import sys
-from datetime import datetime, timezone
 
 import boto3
 import psycopg2
 import psycopg2.extras
-
 from email_template import build_digest_email, build_immediate_email
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

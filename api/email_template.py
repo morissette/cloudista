@@ -10,13 +10,16 @@ Usage:
 """
 from __future__ import annotations  # enables tuple[...] hints on Python 3.8
 
-from datetime import datetime
-
 
 def build_verification_email(confirm_url: str, unsubscribe_url: str, prefs_url: str = "") -> tuple[str, str, str]:
     """Return (subject, html_body, text_body)."""
 
     subject = "Confirm your Cloudista subscription"
+
+    _prefs_part = (
+        f' &nbsp;&middot;&nbsp; <a href="{prefs_url}"'
+        f' style="color:#64748b;text-decoration:none;">Manage preferences</a>'
+    ) if prefs_url else ""
 
     # ------------------------------------------------------------------
     # HTML — table-based for broad email client compatibility.
@@ -180,7 +183,7 @@ def build_verification_email(confirm_url: str, unsubscribe_url: str, prefs_url: 
                    style="color:#64748b;text-decoration:none;">cloudista.org</a>.
                 If that wasn't you, you can safely ignore this email or
                 <a href="{unsubscribe_url}"
-                   style="color:#64748b;text-decoration:none;">unsubscribe</a>{(" &nbsp;&middot;&nbsp; <a href=\"" + prefs_url + "\" style=\"color:#64748b;text-decoration:none;\">Manage preferences</a>") if prefs_url else ""}.
+                   style="color:#64748b;text-decoration:none;">unsubscribe</a>{_prefs_part}.
               </p>
               <p style="margin:0;font-size:12px;color:#cbd5e1;">
                 &copy; 2026 Cloudista &nbsp;&middot;&nbsp; All rights reserved
@@ -231,7 +234,10 @@ To unsubscribe: {unsubscribe_url}{(chr(10) + "Manage preferences: " + prefs_url)
 def _email_footer_html(unsubscribe_url: str, prefs_url: str) -> str:
     """Shared footer HTML for digest and immediate notification emails."""
     prefs_link = (
-        f' &nbsp;&middot;&nbsp; <a href="{prefs_url}" style="color:#64748b;text-decoration:none;">Manage preferences</a>'
+        (
+            f' &nbsp;&middot;&nbsp; <a href="{prefs_url}"'
+            ' style="color:#64748b;text-decoration:none;">Manage preferences</a>'
+        )
         if prefs_url else ""
     )
     return f"""          <!-- ── FOOTER ─────────────────────────────────────────────── -->
