@@ -142,6 +142,7 @@ if (listingEl) {
       updatePagination(data);
       pushUrlState(data.page, activeCategory, '');
       sessionStorage.setItem('blogListingPage', data.page);
+      sessionStorage.setItem('blogListingCategory', activeCategory || '');
     } catch (err) {
       listingEl.innerHTML = `<p class="blog-empty">Failed to load posts. Please try again.</p>`;
       console.error('loadPosts error:', err);
@@ -429,11 +430,18 @@ if (postContentEl) {
     } catch { /* non-critical */ }
   }
 
-  // Restore "Back to Blog" to the page the user came from
+  // Restore "Back to Blog" to the page/category the user came from
   const backEl = document.querySelector('.post-back');
   if (backEl) {
-    const savedPage = parseInt(sessionStorage.getItem('blogListingPage'), 10);
-    if (savedPage > 1) backEl.href = `/page/${savedPage}`;
+    const savedPage     = parseInt(sessionStorage.getItem('blogListingPage'), 10);
+    const savedCategory = sessionStorage.getItem('blogListingCategory') || '';
+    if (savedCategory && savedPage > 1) {
+      backEl.href = `/category/${savedCategory}/page/${savedPage}`;
+    } else if (savedCategory) {
+      backEl.href = `/category/${savedCategory}`;
+    } else if (savedPage > 1) {
+      backEl.href = `/page/${savedPage}`;
+    }
   }
 
   if (postContentEl.dataset.prerendered) {
