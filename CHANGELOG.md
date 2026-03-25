@@ -6,6 +6,50 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — subscriber notifications, analytics, internal linking
+
+### Added
+- `api/main.py` — `GET/POST /api/preferences/{token}` subscriber frequency preference page; 1-year `prefs_token` with transparent auto-rotation on expiry
+- `api/email_template.py` — `build_digest_email()` and `build_immediate_email()` for weekly digest and per-post immediate notifications; shared footer helpers
+- `api/schemas.py` — `PreferencesIn` model (`frequency: Literal["weekly", "immediate"]`)
+- `blog/notify_subscribers.py` — standalone script; `--mode immediate` sends unnotified posts to immediate-frequency subscribers; `--mode digest` sends weekly batch; `--dry-run` flag
+- `.github/workflows/notify-immediate.yml` — cron every 30 min; SCPs script to server and runs immediate notify
+- `.github/workflows/notify-digest.yml` — cron Sundays 14:00 UTC (9 AM ET); runs weekly digest
+- `.github/workflows/list-hygiene.yml` — cron Mondays 06:00 UTC; purges `status='pending'` subscribers older than 30 days; dry-run default on manual dispatch
+- `blog/check_internal_links.py` — cluster-aware script to report missing internal links across related posts; `--cluster`, `--verbose` flags
+- Plausible privacy-friendly analytics on all pages (`site/index.html`, `blog-site/index.html`, `blog-site/post.html`, SSR head in `api/blog_routes.py`)
+- RSS feed at `/feed.xml`; Subscribe modal on blog listing page
+- Internal links added across ~40 posts in 8 topic clusters: Terraform (7 posts), Kubernetes (9 posts), Security/secrets (8 posts), Go/gRPC (5 posts), CI/CD (5 posts), Lambda (3 posts), SaltStack (4 posts), NFCU 2-part series
+- `README.md` — productization roadmap, 3-month revenue roadmap; MySQL migration section removed
+
+### Changed
+- Subscribe route generates `prefs_token` + `prefs_token_expires_at` on INSERT and rotates on resend/resubscribe
+- Verification email footer now includes "Manage preferences" link when `prefs_url` is set
+- `POST /api/preferences/{token}` accepts `application/x-www-form-urlencoded` (HTML form) via FastAPI `Form()`; `python-multipart` added to `Pipfile`
+- `api/blog_routes.py` — removed `html.escape()` wrapper on `image_credit` in SSR template (trusted HTML from DB was being double-encoded)
+- Blog migrated to main page (`/`); coming-soon timer removed
+- `blog/populate_images.py` — added keyword mapping for calendar/routine posts
+
+### Fixed
+- `POST /api/preferences/{token}` validation error returned 500 instead of 422 for invalid frequency values; now catches `ValidationError` and raises `HTTPException(422)`
+- Auto-deploy detection: `git diff HEAD~1` fails with `fetch-depth: 1`; workaround is manual `gh workflow run deploy.yml --field mode=api`
+
+### Schema migrations (run once on production)
+```sql
+ALTER TABLE subscribers
+  ADD COLUMN IF NOT EXISTS frequency             VARCHAR(20) NOT NULL DEFAULT 'weekly',
+  ADD COLUMN IF NOT EXISTS last_digest_at        TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS prefs_token           CHAR(64) UNIQUE,
+  ADD COLUMN IF NOT EXISTS prefs_token_expires_at TIMESTAMPTZ;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_posts_unnotified ON posts (published_at DESC)
+  WHERE status = 'published' AND notified_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_subscribers_prefs_token ON subscribers (prefs_token)
+  WHERE prefs_token IS NOT NULL;
+```
+
+---
+
 ## [Unreleased] — refactor/python-backend
 
 ### Added
