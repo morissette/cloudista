@@ -146,7 +146,7 @@ REMOTE
   step "Verifying container health..."
   ssh_cmd "sudo docker ps --filter name=$CONTAINER --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
   ssh_cmd "curl -sf http://127.0.0.1:$HOST_PORT/api/health && echo '    ✓ /api/health OK'" \
-    || echo "    ! health check failed — check: sudo docker logs $CONTAINER"
+    || { echo "    !!! health check failed — aborting deploy"; echo "    check: sudo docker logs $CONTAINER"; exit 1; }
 
 fi
 
