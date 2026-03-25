@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cloudista — Coming Soon</title>
-  <meta name="description" content="Cloudista is coming — your all-in-one resource for cloud tutorials, tool comparisons, and industry news. Built for DevOps and platform engineers.">
+  <title>Cloudista — Cloud Infrastructure &amp; DevOps Blog</title>
+  <meta name="description" content="Cloud infrastructure tutorials, DevOps guides, and platform engineering posts. AWS, Azure, GCP, and Kubernetes from the field.">
 
   <!-- Canonical -->
   <link rel="canonical" href="https://cloudista.org">
@@ -12,26 +12,26 @@
   <!-- Open Graph -->
   <meta property="og:type"         content="website">
   <meta property="og:url"          content="https://cloudista.org">
-  <meta property="og:title"        content="Cloudista — Coming Soon">
-  <meta property="og:description"  content="Your all-in-one cloud resource for DevOps and platform engineers. Launching April 2026.">
+  <meta property="og:title"        content="Cloudista — Cloud Infrastructure &amp; DevOps Blog">
+  <meta property="og:description"  content="Cloud infrastructure, DevOps, and platform engineering from the field.">
   <meta property="og:image"        content="https://cloudista.org/og-image.png">
   <meta property="og:image:width"  content="1200">
   <meta property="og:image:height" content="630">
 
   <!-- Twitter / X Card -->
   <meta name="twitter:card"        content="summary_large_image">
-  <meta name="twitter:title"       content="Cloudista — Coming Soon">
-  <meta name="twitter:description" content="Your all-in-one cloud resource for DevOps and platform engineers. Launching April 2026.">
+  <meta name="twitter:title"       content="Cloudista — Cloud Infrastructure &amp; DevOps Blog">
+  <meta name="twitter:description" content="Cloud infrastructure, DevOps, and platform engineering from the field.">
   <meta name="twitter:image"       content="https://cloudista.org/og-image.png">
 
   <!-- JSON-LD structured data -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "WebSite",
+    "@type": "Blog",
     "name": "Cloudista",
     "url": "https://cloudista.org",
-    "description": "Cloud tutorials, tool comparisons, and news for DevOps and platform engineers."
+    "description": "Cloud infrastructure tutorials, DevOps guides, and platform engineering posts."
   }
   </script>
 
@@ -67,125 +67,45 @@
         </div>
         Cloudista
       </a>
-      <nav class="site-nav" aria-label="Site navigation">
-        <a href="/blog/">Blog</a>
-      </nav>
     </div>
   </header>
 
-  <!-- ══════════ MAIN ══════════ -->
-  <main class="page-main" id="main-content">
-    <div class="orb orb-1" aria-hidden="true"></div>
-    <div class="orb orb-2" aria-hidden="true"></div>
+  <!-- ══════════ BLOG LISTING ══════════ -->
+  <main class="blog-page" id="main-content">
+    <div class="container blog-page__inner">
 
-    <div class="container page-main__inner">
-      <div class="cs-body">
-
-        <div class="pill" aria-hidden="true">
-          <span class="pill__dot"></span>
-          Launching Soon
-        </div>
-
-        <h1 class="cs-title">
-          All Things Cloud,<br>
-          <span class="gradient-text">One Place.</span>
-        </h1>
-
-        <p class="cs-sub">
-          Cloudista is your go-to resource for cloud tutorials, head-to-head
-          tool comparisons, and daily news across AWS, Azure, GCP, and the
-          broader cloud-native ecosystem. Built for DevOps and platform engineers.
-        </p>
-
-        <!-- Email signup -->
-        <form class="signup-form" id="signup-form" novalidate>
-          <label for="email-input" class="sr-only">Email address</label>
-          <input
-            type="email"
-            id="email-input"
-            class="signup-form__input"
-            placeholder="you@company.com"
-            required
-            autocomplete="email"
-          >
-          <button type="submit" class="btn btn-primary" id="signup-btn">
-            Notify Me
-          </button>
-          <!-- Honeypot: off-screen, bots fill it, keyboard users skip it -->
-          <div class="hp-field" aria-hidden="true">
-            <label for="website">Website</label>
-            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
-          </div>
-        </form>
-
-        <!-- CAPTCHA widget: injected here when bot heuristics are triggered -->
-        <div id="captcha-wrap" style="display:none;"></div>
-
-        <div class="signup-success" id="signup-success" role="status" aria-live="polite">
-          <span class="signup-success__icon" aria-hidden="true">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                 stroke="#059669" stroke-width="3"
-                 stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-          </span>
-          <span data-msg>Check your email — we've sent you a confirmation link.</span>
-        </div>
-
-        <p class="signup-note" id="signup-note">
-          Be the first to know. No spam, ever.
-        </p>
-
-        <!-- Inline error (hidden by default) -->
-        <p id="signup-error" style="display:none; margin-top:.5rem; font-size:.8rem; color:#dc2626;" role="alert"></p>
-
-        <!-- Countdown -->
-        <div class="countdown" aria-label="Time until launch">
-          <div class="countdown__label">Launching in</div>
-          <div class="countdown__grid" role="timer" aria-live="off">
-            <div class="countdown__unit">
-              <span class="countdown__num" id="cd-days">--</span>
-              <span class="countdown__seg">Days</span>
-            </div>
-            <span class="countdown__sep" aria-hidden="true">:</span>
-            <div class="countdown__unit">
-              <span class="countdown__num" id="cd-hours">--</span>
-              <span class="countdown__seg">Hours</span>
-            </div>
-            <span class="countdown__sep" aria-hidden="true">:</span>
-            <div class="countdown__unit">
-              <span class="countdown__num" id="cd-mins">--</span>
-              <span class="countdown__seg">Mins</span>
-            </div>
-            <span class="countdown__sep" aria-hidden="true">:</span>
-            <div class="countdown__unit">
-              <span class="countdown__num" id="cd-secs">--</span>
-              <span class="countdown__seg">Secs</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- What's coming chips -->
-        <div class="coming-chips" aria-label="What's coming">
-          <span class="chip chip--blue">
-            <span class="chip__dot" aria-hidden="true"></span>
-            Tutorials &amp; Guides
-          </span>
-          <span class="chip chip--green">
-            <span class="chip__dot" aria-hidden="true"></span>
-            Tool Comparisons
-          </span>
-          <span class="chip chip--purple">
-            <span class="chip__dot" aria-hidden="true"></span>
-            News &amp; Updates
-          </span>
-          <span class="chip chip--orange">
-            <span class="chip__dot" aria-hidden="true"></span>
-            AWS · Azure · GCP · K8s
-          </span>
-        </div>
-
+      <div class="blog-header">
+        <h1 class="blog-title">Blog</h1>
+        <p class="blog-subtitle">Cloud infrastructure, DevOps, and platform engineering from the field.</p>
       </div>
+
+      <!-- Search + filter -->
+      <div class="blog-controls">
+        <div class="blog-search">
+          <svg class="blog-search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="search-input" class="blog-search__input" type="search" placeholder="Search posts…" aria-label="Search posts" autocomplete="off">
+        </div>
+        <div class="blog-categories" id="category-pills" role="group" aria-label="Filter by category">
+          <!-- category pills injected by JS -->
+        </div>
+      </div>
+
+      <div class="post-grid" id="post-grid" aria-live="polite" aria-label="Blog posts">
+        <!-- skeleton cards injected by JS until API responds -->
+      </div>
+
+      <div class="pagination" id="pagination" hidden>
+        <button class="pagination__btn" id="prev-btn" aria-label="Previous page">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+          Previous
+        </button>
+        <span class="pagination__info" id="page-info"></span>
+        <button class="pagination__btn" id="next-btn" aria-label="Next page">
+          Next
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
     </div>
   </main>
 
@@ -202,6 +122,7 @@
   </footer>
 
   <script src="/main.js" defer></script>
+  <script src="/blog/blog.js" defer></script>
 
 </body>
 </html>
