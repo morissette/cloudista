@@ -15,6 +15,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — back link restores category context
+
+### Fixed
+- `blog-site/blog.js` — "Back to Blog" on a post page now returns to `/category/<slug>` (or `/category/<slug>/page/N`) when the user arrived from a category-filtered listing; previously it always returned to root
+
+---
+
 ## [2026-03-25] — pretty URL pagination + WebP nginx fix
 
 ### Changed
