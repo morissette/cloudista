@@ -32,6 +32,7 @@ if (listingEl) {
   let activeCategory  = null;
   let searchQuery     = '';
   let searchTimer     = null;
+  let fetchController = null;   // AbortController for the current in-flight request
 
   const prevBtn       = document.getElementById('prev-btn');
   const nextBtn       = document.getElementById('next-btn');
@@ -122,13 +123,19 @@ if (listingEl) {
 
   // ── Load (paginated, category-filtered) ──────────────────────
   async function loadPosts(page) {
+    // Cancel any previous in-flight request so stale responses never land
+    if (fetchController) fetchController.abort();
+    fetchController = new AbortController();
+    const { signal }   = fetchController;
+    const category     = activeCategory;   // snapshot — may change before response arrives
+
     listingEl.innerHTML = Array(PER_PAGE).fill(0).map(skeletonCard).join('');
 
     let url = `${API}/posts?page=${page}&per_page=${PER_PAGE}`;
-    if (activeCategory) url += `&category=${encodeURIComponent(activeCategory)}`;
+    if (category) url += `&category=${encodeURIComponent(category)}`;
 
     try {
-      const res  = await fetch(url);
+      const res  = await fetch(url, { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
@@ -140,10 +147,11 @@ if (listingEl) {
       }
       data.posts.forEach(p => listingEl.insertAdjacentHTML('beforeend', postCard(p)));
       updatePagination(data);
-      pushUrlState(data.page, activeCategory, '');
+      pushUrlState(data.page, category, '');
       sessionStorage.setItem('blogListingPage', data.page);
-      sessionStorage.setItem('blogListingCategory', activeCategory || '');
+      sessionStorage.setItem('blogListingCategory', category || '');
     } catch (err) {
+      if (err.name === 'AbortError') return;  // superseded — discard silently
       listingEl.innerHTML = `<p class="blog-empty">Failed to load posts. Please try again.</p>`;
       console.error('loadPosts error:', err);
     }
@@ -151,24 +159,31 @@ if (listingEl) {
 
   // ── Search ────────────────────────────────────────────────────
   async function runSearch(q, page) {
+    // Cancel any previous in-flight request
+    if (fetchController) fetchController.abort();
+    fetchController = new AbortController();
+    const { signal } = fetchController;
+    const query      = q;   // snapshot
+
     listingEl.innerHTML = Array(PER_PAGE).fill(0).map(skeletonCard).join('');
     pagination.hidden = true;
 
     try {
-      const res  = await fetch(`${API}/search?q=${encodeURIComponent(q)}&page=${page}&per_page=${PER_PAGE}`);
+      const res  = await fetch(`${API}/search?q=${encodeURIComponent(query)}&page=${page}&per_page=${PER_PAGE}`, { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
       listingEl.innerHTML = '';
       if (!data.posts.length) {
-        listingEl.innerHTML = `<p class="blog-empty">No results for <strong>${escHtml(q)}</strong>.</p>`;
-        pushUrlState(1, null, q);
+        listingEl.innerHTML = `<p class="blog-empty">No results for <strong>${escHtml(query)}</strong>.</p>`;
+        pushUrlState(1, null, query);
         return;
       }
       data.posts.forEach(p => listingEl.insertAdjacentHTML('beforeend', postCard(p)));
       updatePagination(data);
-      pushUrlState(data.page, null, q);
+      pushUrlState(data.page, null, query);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       listingEl.innerHTML = `<p class="blog-empty">Search failed. Please try again.</p>`;
       console.error('runSearch error:', err);
     }
