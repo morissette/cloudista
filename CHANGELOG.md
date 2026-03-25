@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — blog route test coverage
+
+### Added
+- `api/tests/test_blog_routes.py` — 30 tests covering all blog API endpoints: `GET /api/posts` (pagination, tag/category filter, validation, DB errors), `GET /api/posts/{slug}` (found, 404, DB error), `GET /api/search` (results, empty, query validation), `GET /api/tags`, `GET /api/categories`, `GET /api/posts/{slug}/related`
+
+---
+
 ## [2026-03-25] — fix ruff E402 lint in localize_images.py
 
 ### Fixed
