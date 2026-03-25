@@ -449,7 +449,7 @@ class TestPreferences:
 
         resp = c.post(
             "/api/preferences/validtoken",
-            json={"frequency": "immediate"},
+            data={"frequency": "immediate"},
             follow_redirects=False,
         )
         assert resp.status_code == 303
@@ -461,7 +461,7 @@ class TestPreferences:
 
         resp = c.post(
             "/api/preferences/validtoken",
-            json={"frequency": "weekly"},
+            data={"frequency": "weekly"},
             follow_redirects=False,
         )
         assert resp.status_code == 303
@@ -470,7 +470,7 @@ class TestPreferences:
         c, _ = client
         resp = c.post(
             "/api/preferences/validtoken",
-            json={"frequency": "never"},
+            data={"frequency": "never"},
         )
         assert resp.status_code == 422
 
@@ -480,7 +480,7 @@ class TestPreferences:
 
         resp = c.post(
             "/api/preferences/unknowntoken",
-            json={"frequency": "weekly"},
+            data={"frequency": "weekly"},
         )
         assert resp.status_code == 404
 
