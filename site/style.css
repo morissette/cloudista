@@ -358,6 +358,67 @@ a { color: inherit; text-decoration: none; }
 .site-nav a:hover  { color: var(--text-1); }
 .site-nav a.active { color: var(--accent); }
 
+.nav-rss {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: .85rem; font-weight: 600; color: var(--text-3);
+  text-decoration: none; transition: color .15s;
+}
+.nav-rss:hover { color: var(--text-1); }
+
+.nav-subscribe {
+  display: inline-flex; align-items: center;
+  font-size: .82rem; font-weight: 600;
+  padding: 6px 14px; border-radius: var(--r-sm);
+  background: var(--accent); color: #fff;
+  border: 1.5px solid var(--accent);
+  cursor: pointer; transition: all .15s; font-family: var(--font);
+}
+.nav-subscribe:hover {
+  background: var(--accent-dark); border-color: var(--accent-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37,99,235,.25);
+}
+
+/* ════════════════════════════════════════
+   SUBSCRIBE MODAL
+════════════════════════════════════════ */
+.subscribe-modal {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.subscribe-modal[hidden] { display: none; }
+
+.subscribe-modal__backdrop {
+  position: absolute; inset: 0;
+  background: rgba(15,23,42,.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.subscribe-modal__dialog {
+  position: relative; z-index: 1;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 2rem;
+  max-width: 420px; width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,.15);
+}
+.subscribe-modal__close {
+  position: absolute; top: .875rem; right: .875rem;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-4); padding: 4px; line-height: 0;
+  border-radius: var(--r-sm); transition: color .15s, background .15s;
+}
+.subscribe-modal__close:hover { color: var(--text-1); background: var(--bg-3); }
+
+.subscribe-modal__title {
+  font-size: 1.2rem; font-weight: 800;
+  letter-spacing: -.03em; margin-bottom: .35rem;
+}
+.subscribe-modal__desc {
+  font-size: .875rem; color: var(--text-3);
+  line-height: 1.6; margin-bottom: 1.25rem;
+}
+
 /* ════════════════════════════════════════
    BLOG LISTING PAGE
 ════════════════════════════════════════ */

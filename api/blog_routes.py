@@ -7,9 +7,11 @@ GET /api/blog/tags               – all tags
 GET /api/blog/categories         – all categories
 """
 
+import datetime as _dt
 import html as _html
 import json as _json
 import logging
+from email.utils import format_datetime as _fmt_dt
 
 import asyncpg
 from config import settings
@@ -404,6 +406,61 @@ async def sitemap(conn: asyncpg.Connection = Depends(get_pg_conn)):
     )
 
 
+@router.get("/feed.xml", include_in_schema=False)
+async def rss_feed(conn: asyncpg.Connection = Depends(get_pg_conn)):
+    """RSS 2.0 feed of the 20 most recent published posts."""
+
+    def _rfc2822(dt) -> str:
+        if not dt:
+            return ""
+        if not isinstance(dt, _dt.datetime):
+            dt = _dt.datetime(dt.year, dt.month, dt.day, tzinfo=_dt.timezone.utc)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_dt.timezone.utc)
+        return _fmt_dt(dt, usegmt=True)
+
+    try:
+        posts = await conn.fetch(
+            "SELECT slug, title, excerpt, published_at"
+            " FROM posts WHERE status = 'published' AND published_at <= NOW()"
+            " ORDER BY published_at DESC LIMIT 20"
+        )
+    except asyncpg.PostgresError as exc:
+        log.error("rss_feed error: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to generate RSS feed.")
+
+    now_rfc = _rfc2822(_dt.datetime.now(_dt.timezone.utc))
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">',
+        "  <channel>",
+        "    <title>Cloudista</title>",
+        f"    <link>{_SITE_ROOT}</link>",
+        "    <description>Cloud infrastructure, DevOps, and platform engineering from the field.</description>",
+        "    <language>en-us</language>",
+        f"    <lastBuildDate>{now_rfc}</lastBuildDate>",
+        f'    <atom:link href="{_SITE_ROOT}/feed.xml" rel="self" type="application/rss+xml"/>',
+    ]
+    for row in posts:
+        link = f"{_SITE_ROOT}/blog/{_xml_escape(row['slug'])}"
+        lines += [
+            "    <item>",
+            f"      <title>{_xml_escape(row['title'] or '')}</title>",
+            f"      <link>{link}</link>",
+            f"      <description>{_xml_escape(row['excerpt'] or '')}</description>",
+            f"      <pubDate>{_rfc2822(row['published_at'])}</pubDate>",
+            f'      <guid isPermaLink="true">{link}</guid>',
+            "    </item>",
+        ]
+    lines += ["  </channel>", "</rss>"]
+
+    return Response(
+        content="\n".join(lines),
+        media_type="application/rss+xml",
+        headers={"Cache-Control": "public, max-age=1800"},
+    )
+
+
 # ── Server-rendered post pages (for SEO / Googlebot) ──────────────────────────
 
 html_router = APIRouter(tags=["blog"])
@@ -442,6 +499,7 @@ _POST_HTML_TEMPLATE = """\
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
   <link rel="manifest"         href="/site.webmanifest">
 
+  <link rel="alternate" type="application/rss+xml" title="Cloudista RSS Feed" href="/feed.xml">
   <link rel="preload" as="style" href="/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -450,6 +508,8 @@ _POST_HTML_TEMPLATE = """\
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+
+  <div class="confirm-banner" id="confirm-banner" role="alert" aria-live="polite"></div>
 
   <header class="site-header">
     <div class="container site-header__inner">
@@ -463,6 +523,18 @@ _POST_HTML_TEMPLATE = """\
         </div>
         Cloudista
       </a>
+      <nav class="site-nav" aria-label="Site navigation">
+        <a href="/feed.xml" class="nav-rss" aria-label="RSS feed">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="6.18" cy="17.82" r="2.18"/>
+            <path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83
+              c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07
+              3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/>
+          </svg>
+          RSS
+        </a>
+        <button class="nav-subscribe" id="subscribe-btn" type="button">Subscribe</button>
+      </nav>
     </div>
   </header>
 
@@ -505,6 +577,45 @@ _POST_HTML_TEMPLATE = """\
     </div>
   </footer>
 
+  <div class="subscribe-modal" id="subscribe-modal"
+       role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+    <div class="subscribe-modal__backdrop" id="modal-backdrop"></div>
+    <div class="subscribe-modal__dialog">
+      <button class="subscribe-modal__close" id="modal-close" aria-label="Close dialog">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <h2 class="subscribe-modal__title" id="modal-title">Stay in the loop</h2>
+      <p class="subscribe-modal__desc">Get new posts delivered to your inbox. No spam, ever.</p>
+      <form class="signup-form" id="subscribe-form" novalidate>
+        <label for="subscribe-email" class="sr-only">Email address</label>
+        <input type="email" id="subscribe-email" class="signup-form__input"
+               placeholder="you@company.com" required autocomplete="email">
+        <button type="submit" class="btn btn-primary" id="subscribe-submit">Subscribe</button>
+        <div class="hp-field" aria-hidden="true">
+          <label for="subscribe-website">Website</label>
+          <input type="text" id="subscribe-website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+      </form>
+      <div id="subscribe-captcha-wrap" style="display:none;margin-top:.75rem;"></div>
+      <div class="signup-success" id="subscribe-success" role="status" aria-live="polite">
+        <span class="signup-success__icon" aria-hidden="true">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+               stroke="#059669" stroke-width="3"
+               stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </span>
+        <span data-msg>Check your email — we've sent you a confirmation link.</span>
+      </div>
+      <p id="subscribe-error" style="display:none;margin-top:.5rem;font-size:.8rem;color:#dc2626;" role="alert"></p>
+    </div>
+  </div>
+
+  <script src="/main.js" defer></script>
   <script src="/blog/blog.js" defer></script>
 </body>
 </html>"""
