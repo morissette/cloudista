@@ -144,13 +144,18 @@ REMOTE
   ssh_cmd "curl -sf http://127.0.0.1:$HOST_PORT/api/health && echo '    ✓ /api/health OK'" \
     || echo "    ! health check failed — check: sudo docker logs $CONTAINER"
 
-  step "Updating nginx config..."
-  scp_file infra/nginx-cloudista.conf "$SSH_HOST:/tmp/cloudista.conf"
-  ssh_cmd "sudo cp /tmp/cloudista.conf /etc/nginx/conf.d/cloudista.conf"
-  ssh_cmd "sudo nginx -t && sudo nginx -s reload"
-  ok "nginx reloaded"
-
 fi
+
+# ---------------------------------------------------------------------------
+# 3. nginx config — always deploy so infra/ changes take effect in any mode
+# ---------------------------------------------------------------------------
+step "Updating nginx config..."
+scp_file infra/nginx-cloudista.conf "$SSH_HOST:/tmp/cloudista.conf"
+ssh_cmd "sudo cp /tmp/cloudista.conf /etc/nginx/conf.d/cloudista.conf"
+# Test config before reloading; abort if invalid to avoid taking down the site
+ssh_cmd "sudo nginx -t" || { echo "!!! nginx config test failed — aborting reload"; exit 1; }
+ssh_cmd "sudo nginx -s reload"
+ok "nginx reloaded"
 
 # ---------------------------------------------------------------------------
 # Done
