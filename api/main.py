@@ -11,10 +11,10 @@ GET  /api/health                 – liveness probe (validates DB connectivity)
 import asyncio
 import base64
 import contextvars
-import hashlib
 import json
 import logging
 import re
+import secrets
 import urllib.parse
 import urllib.request
 import uuid
@@ -141,9 +141,8 @@ async def request_id_middleware(request: Request, call_next):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_token(email: str) -> str:
-    raw = f"{email}{uuid.uuid4()}{datetime.now(timezone.utc).timestamp()}"
-    return hashlib.sha256(raw.encode()).hexdigest()
+def _make_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 def _verify_turnstile_sync(token: str, ip: str) -> TurnstileResult:
@@ -355,17 +354,15 @@ async def health():
 
     db_ok = True
     db_error = None
-    if _pg_pool is None:
+    try:
+        if _pg_pool is None:
+            raise RuntimeError("pool not initialised")
+        async with _pg_pool.acquire(timeout=2.0) as conn:
+            await conn.fetchval("SELECT 1")
+    except Exception as exc:
+        log.warning("DB ping failed: %s", exc)
         db_ok = False
-        db_error = "Pool not initialised"
-    else:
-        try:
-            async with _pg_pool.acquire(timeout=2.0) as conn:
-                await conn.fetchval("SELECT 1")
-        except Exception as exc:
-            log.warning("DB ping failed: %s", exc)
-            db_ok = False
-            db_error = "Connection failed"  # don't leak internal details
+        db_error = "Unavailable"
     return HealthOut(
         status="ok",
         db="ok" if db_ok else "unavailable",
@@ -417,8 +414,8 @@ async def subscribe(
                     return MessageOut(message="Already confirmed.")
 
                 if row["status"] == "unsubscribed":
-                    t = _make_token(body.email)
-                    pt = _make_token(body.email + "prefs")
+                    t = _make_token()
+                    pt = _make_token()
                     await conn.execute(
                         "UPDATE subscribers SET status='pending', token=$1, token_expires_at=$2,"
                         " confirmed_at=NULL, unsubscribed_at=NULL,"
@@ -434,8 +431,8 @@ async def subscribe(
                     resend_msg = "Re-subscribed — check your email."
                 else:
                     # pending — always rotate token on resend so old links are invalidated
-                    t = _make_token(body.email)
-                    pt = _make_token(body.email + "prefs")
+                    t = _make_token()
+                    pt = _make_token()
                     await conn.execute(
                         "UPDATE subscribers SET token=$1, token_expires_at=$2,"
                         " prefs_token=$3, prefs_token_expires_at=$4 WHERE id=$5",
@@ -449,8 +446,8 @@ async def subscribe(
                     send_prefs_token = pt
                     resend_msg = "Confirmation email resent."
             else:
-                t = _make_token(body.email)
-                pt = _make_token(body.email + "prefs")
+                t = _make_token()
+                pt = _make_token()
                 await conn.execute(
                     """INSERT INTO subscribers
                        (email, source, token, token_expires_at, ip_address, user_agent,
@@ -578,7 +575,7 @@ async def preferences_page(token: str, saved: str = "", conn: asyncpg.Connection
         row["prefs_token_expires_at"] is not None
         and row["prefs_token_expires_at"] < datetime.now(timezone.utc)
     ):
-        new_pt = _make_token(row["email"] + "prefs")
+        new_pt = _make_token()
         try:
             await conn.execute(
                 "UPDATE subscribers SET prefs_token = $1, prefs_token_expires_at = $2 WHERE id = $3",

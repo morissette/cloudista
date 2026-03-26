@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — simplify token generation, fix health endpoint, reproducible Docker builds
+
+### Changed
+- `api/main.py` — `_make_token()` replaced with `secrets.token_urlsafe(32)`; removed `hashlib` import; all call sites updated (email arg dropped)
+- `api/main.py` — health endpoint: pool-not-initialised and connection errors both return `db_error = "Unavailable"` instead of distinct internal messages
+- `api/Dockerfile` — `--skip-lock` replaced with `--deploy` for reproducible builds (enforces `Pipfile.lock`)
+
+---
+
 ## [2026-03-26] — replace 503 with 403 for unconfigured admin key
 
 ### Changed
