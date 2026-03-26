@@ -629,7 +629,7 @@ _POST_HTML_TEMPLATE = """\
   </div>
 
   <script src="/main.js?v=__DEPLOY_HASH__" defer></script>
-  <script src="/blog/blog.js" defer></script>
+  <script src="/blog/blog.js?v=__DEPLOY_HASH__" defer></script>
 </body>
 </html>"""
 
