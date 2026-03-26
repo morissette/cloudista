@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — HTML-escape text content and URL attributes in email templates
+
+### Changed
+- `api/email_template.py` — added `import html`; post titles and excerpts are now escaped with `html.escape()` before insertion into HTML; URLs used as `href` attributes are escaped with `html.escape(quote=True)` to handle `&` in query strings correctly
+- `api/tests/test_email_template.py` — updated `test_special_characters_in_url_survive` to assert escaped form appears in HTML; added 4 new tests verifying digest/immediate emails escape titles and excerpts
+
+---
+
 ## [2026-03-26] — expired prefs link returns error page instead of silent token rotation
 
 ### Changed
