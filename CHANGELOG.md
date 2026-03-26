@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — upgrade to Python 3.12
+
+### Changed
+- `api/Dockerfile` — base image updated from `python:3.11-slim` to `python:3.12-slim`
+- `api/Pipfile` — `python_version` and `python_full_version` updated to `3.12`
+- `.github/workflows/test.yml`, `lint.yml`, `populate-images.yml`, `localize-images.yml` — all updated to `python-version: "3.12"`
+- `README.md` — roadmap checklist updated to reflect completion
+
+---
+
 ## [2026-03-26] — distinguish transient vs permanent DB errors in blog routes
 
 ### Changed
