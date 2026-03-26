@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — add TTL to SNS certificate cache
+
+### Changed
+- `api/main.py` — `_SNS_CERT_CACHE` now stores `(cert_pem, fetch_time)` tuples; cached certs older than 24 hours are re-fetched so AWS key rotations take effect without a process restart
+
+---
+
 ## [2026-03-26] — mask email addresses in log output
 
 ### Changed
