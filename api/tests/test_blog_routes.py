@@ -401,3 +401,220 @@ class TestRelatedPosts:
         c, conn = blog_client
         resp = c.get("/api/posts/test-post/related?limit=99")
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# _is_bot() and _country() — unit tests (no routing needed)
+# ---------------------------------------------------------------------------
+
+class TestIsBotHelper:
+    def test_known_bot_ua_returns_true(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _is_bot
+        req = MagicMock()
+        req.headers.get = lambda k, d="": {
+            "user-agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+        }.get(k, d)
+        assert _is_bot(req) is True
+
+    def test_gptbot_returns_true(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _is_bot
+        req = MagicMock()
+        req.headers.get = lambda k, d="": {"user-agent": "GPTBot/1.0"}.get(k, d)
+        assert _is_bot(req) is True
+
+    def test_browser_ua_returns_false(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _is_bot
+        req = MagicMock()
+        req.headers.get = lambda k, d="": {
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+        }.get(k, d)
+        assert _is_bot(req) is False
+
+    def test_empty_ua_returns_false(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _is_bot
+        req = MagicMock()
+        req.headers.get = lambda k, d="": d
+        assert _is_bot(req) is False
+
+
+class TestCountryHelper:
+    def test_valid_country_code(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _country
+        req = MagicMock()
+        req.headers.get = lambda k, d="XX": {"CF-IPCountry": "US"}.get(k, d)
+        assert _country(req) == "US"
+
+    def test_lowercase_is_uppercased(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _country
+        req = MagicMock()
+        req.headers.get = lambda k, d="XX": {"CF-IPCountry": "gb"}.get(k, d)
+        assert _country(req) == "GB"
+
+    def test_missing_header_defaults_xx(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _country
+        req = MagicMock()
+        req.headers.get = lambda k, d="XX": d
+        assert _country(req) == "XX"
+
+    def test_invalid_code_defaults_xx(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _country
+        req = MagicMock()
+        req.headers.get = lambda k, d="XX": {"CF-IPCountry": "123"}.get(k, d)
+        assert _country(req) == "XX"
+
+    def test_too_long_code_defaults_xx(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _country
+        req = MagicMock()
+        req.headers.get = lambda k, d="XX": {"CF-IPCountry": "USA"}.get(k, d)
+        assert _country(req) == "XX"
+
+
+# ---------------------------------------------------------------------------
+# /api/posts/{slug}/stats — per-post view stats (admin only)
+# ---------------------------------------------------------------------------
+
+TOTALS_ROW = {"views_7d": 50, "views_30d": 150, "views_all": 500, "bot_views_all": 20}
+DAILY_ROW  = {"viewed_on": __import__("datetime").date(2026, 3, 25), "views": 10, "bot_views": 1}
+COUNTRY_ROW = {"country": "US", "views": 300}
+POST_ID_ROW = {"id": 1, "title": "Test Post"}
+
+
+class TestGetPostStats:
+    def _setup_conn(self, mock_conn, missing=False):
+        mock_conn.fetchrow = AsyncMock(side_effect=[
+            None if missing else _record(POST_ID_ROW),
+            _record(TOTALS_ROW),
+        ])
+        mock_conn.fetch = AsyncMock(side_effect=[
+            [_record(DAILY_ROW)],
+            [_record(COUNTRY_ROW)],
+        ])
+
+    def test_returns_stats(self, blog_client):
+        c, conn = blog_client
+        self._setup_conn(conn)
+        resp = c.get("/api/posts/test-post/stats", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["slug"] == "test-post"
+        assert data["views_7d"] == 50
+        assert data["views_all"] == 500
+        assert data["bot_views_all"] == 20
+        assert len(data["daily"]) == 1
+        assert data["daily"][0]["views"] == 10
+        assert len(data["top_countries"]) == 1
+        assert data["top_countries"][0]["country"] == "US"
+
+    def test_missing_post_returns_404(self, blog_client):
+        c, conn = blog_client
+        self._setup_conn(conn, missing=True)
+        resp = c.get("/api/posts/no-such-post/stats", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code == 404
+
+    def test_no_admin_key_returns_403(self, blog_client):
+        c, conn = blog_client
+        resp = c.get("/api/posts/test-post/stats")
+        assert resp.status_code == 403
+
+    def test_wrong_admin_key_returns_403(self, blog_client):
+        c, conn = blog_client
+        resp = c.get("/api/posts/test-post/stats", headers={"X-Admin-Key": "wrong-key"})
+        assert resp.status_code == 403
+
+    def test_db_error_returns_503_or_500(self, blog_client):
+        import asyncpg
+        c, conn = blog_client
+        conn.fetchrow = AsyncMock(side_effect=asyncpg.PostgresError("boom"))
+        resp = c.get("/api/posts/test-post/stats", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code in (500, 503)
+
+
+# ---------------------------------------------------------------------------
+# /api/stats — blog-wide view summary (admin only)
+# ---------------------------------------------------------------------------
+
+STATS_ROW = {
+    "slug": "test-post", "title": "Test Post",
+    "views_7d": 50, "views_30d": 150, "views_all": 500, "bot_views_all": 20,
+}
+
+
+class TestGetBlogStats:
+    def _setup_conn(self, mock_conn, rows=None):
+        _rows = [STATS_ROW] if rows is None else rows
+        mock_conn.fetch = AsyncMock(return_value=[_record(r) for r in _rows])
+
+    def test_returns_stats_list(self, blog_client):
+        c, conn = blog_client
+        self._setup_conn(conn)
+        resp = c.get("/api/stats", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert data[0]["slug"] == "test-post"
+        assert data[0]["views_all"] == 500
+
+    def test_no_admin_key_returns_403(self, blog_client):
+        c, conn = blog_client
+        resp = c.get("/api/stats")
+        assert resp.status_code == 403
+
+    def test_invalid_period_returns_422(self, blog_client):
+        c, conn = blog_client
+        resp = c.get("/api/stats?period=bad", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code == 422
+
+    def test_period_7d(self, blog_client):
+        c, conn = blog_client
+        self._setup_conn(conn)
+        resp = c.get("/api/stats?period=7d", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code == 200
+
+    def test_period_all(self, blog_client):
+        c, conn = blog_client
+        self._setup_conn(conn)
+        resp = c.get("/api/stats?period=all", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code == 200
+
+    def test_include_bots_flag(self, blog_client):
+        c, conn = blog_client
+        self._setup_conn(conn)
+        resp = c.get("/api/stats?include_bots=true", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code == 200
+
+    def test_empty_result(self, blog_client):
+        c, conn = blog_client
+        self._setup_conn(conn, rows=[])
+        resp = c.get("/api/stats", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_limit_validation(self, blog_client):
+        c, conn = blog_client
+        resp = c.get("/api/stats?limit=0", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code == 422
+
+    def test_db_error_returns_500_or_503(self, blog_client):
+        import asyncpg
+        c, conn = blog_client
+        conn.fetch = AsyncMock(side_effect=asyncpg.PostgresError("boom"))
+        resp = c.get("/api/stats", headers={"X-Admin-Key": "test-admin-key"})
+        assert resp.status_code in (500, 503)

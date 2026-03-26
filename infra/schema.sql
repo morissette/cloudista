@@ -33,6 +33,26 @@ CREATE OR REPLACE VIEW active_subscribers AS
     WHERE status = 'confirmed';
 
 -- ============================================================
+--  Post view counts (daily time-series)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS post_views (
+    post_id    INTEGER  NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    viewed_on  DATE     NOT NULL DEFAULT CURRENT_DATE,
+    country    CHAR(2)  NOT NULL DEFAULT 'XX',  -- ISO 3166-1 alpha-2; XX = unknown/Tor
+    is_bot     BOOLEAN  NOT NULL DEFAULT false,
+    view_count INTEGER  NOT NULL DEFAULT 1,
+    PRIMARY KEY (post_id, viewed_on, country, is_bot)
+);
+
+CREATE INDEX IF NOT EXISTS idx_post_views_date    ON post_views (viewed_on);
+CREATE INDEX IF NOT EXISTS idx_post_views_post_id ON post_views (post_id);
+CREATE INDEX IF NOT EXISTS idx_post_views_country ON post_views (country);
+-- Partial index for human-only queries (most common analytics path)
+CREATE INDEX IF NOT EXISTS idx_post_views_humans
+    ON post_views (post_id, viewed_on) WHERE is_bot = false;
+
+-- ============================================================
 --  Post revisions
 -- ============================================================
 
@@ -64,6 +84,23 @@ CREATE INDEX IF NOT EXISTS idx_post_revisions_post_id
 --  CREATE INDEX IF NOT EXISTS idx_post_revisions_post_id ...;
 -- ============================================================
 
+-- ============================================================
+--  Post view metrics (run once on production):
+--
+--  CREATE TABLE IF NOT EXISTS post_views (
+--      post_id    INTEGER  NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+--      viewed_on  DATE     NOT NULL DEFAULT CURRENT_DATE,
+--      country    CHAR(2)  NOT NULL DEFAULT 'XX',
+--      is_bot     BOOLEAN  NOT NULL DEFAULT false,
+--      view_count INTEGER  NOT NULL DEFAULT 1,
+--      PRIMARY KEY (post_id, viewed_on, country, is_bot)
+--  );
+--  CREATE INDEX IF NOT EXISTS idx_post_views_date    ON post_views (viewed_on);
+--  CREATE INDEX IF NOT EXISTS idx_post_views_post_id ON post_views (post_id);
+--  CREATE INDEX IF NOT EXISTS idx_post_views_country ON post_views (country);
+--  CREATE INDEX IF NOT EXISTS idx_post_views_humans
+--      ON post_views (post_id, viewed_on) WHERE is_bot = false;
+--
 -- ============================================================
 --  Subscriber notification preferences + post notifications
 --  (run once on production):

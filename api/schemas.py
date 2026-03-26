@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Literal
 
@@ -79,3 +79,34 @@ class PostRevisionOut(BaseModel):
 
 class PreferencesIn(BaseModel):
     frequency: Literal["weekly", "immediate"]
+
+
+class PostViewDay(BaseModel):
+    date: date
+    views: int
+    bot_views: int
+
+
+class PostCountryBreakdown(BaseModel):
+    country: str
+    views: int
+
+
+class PostStatsSummary(BaseModel):
+    slug: str
+    title: str
+    views_7d: int
+    views_30d: int
+    views_all: int
+    bot_views_all: int
+
+
+class PostStatsDetail(BaseModel):
+    slug: str
+    title: str
+    views_7d: int
+    views_30d: int
+    views_all: int
+    bot_views_all: int
+    daily: list[PostViewDay]
+    top_countries: list[PostCountryBreakdown]

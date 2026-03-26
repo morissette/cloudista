@@ -3,6 +3,8 @@ Blog API Routes
 ---------------
 GET /api/blog/posts              – paginated list of published posts
 GET /api/blog/posts/{slug}       – single post by slug
+GET /api/blog/posts/{slug}/stats – per-post view stats (daily, country, bot breakdown)
+GET /api/blog/stats              – top posts by views (7d / 30d / all-time)
 GET /api/blog/tags               – all tags
 GET /api/blog/categories         – all categories
 """
@@ -11,6 +13,7 @@ import datetime as _dt
 import html as _html
 import json as _json
 import logging
+import re as _re
 from email.utils import format_datetime as _fmt_dt
 
 import asyncpg
@@ -18,9 +21,73 @@ from config import settings
 from dependencies import get_pg_conn, limiter
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
-from schemas import CategoryOut, MessageOut, PostDetail, PostList, PostRevisionOut, PostSummary, TagOut
+from prometheus_client import Counter
+from schemas import (
+    CategoryOut,
+    MessageOut,
+    PostCountryBreakdown,
+    PostDetail,
+    PostList,
+    PostRevisionOut,
+    PostStatsDetail,
+    PostStatsSummary,
+    PostSummary,
+    PostViewDay,
+    TagOut,
+)
 
 log = logging.getLogger(__name__)
+
+# ── Prometheus ────────────────────────────────────────────────────────────────
+
+_counter_post_views = Counter(
+    "cloudista_post_views_total",
+    "Total post views by slug, country, and bot status",
+    ["slug", "country", "is_bot"],
+)
+
+# ── Bot detection ─────────────────────────────────────────────────────────────
+
+_BOT_UA_RE = _re.compile(
+    r"bot|crawl|spider|slurp|mediapartners|facebookexternalhit|"
+    r"twitterbot|linkedinbot|whatsapp|telegrambot|applebot|"
+    r"googleother|bytespider|gptbot|claudebot|anthropic|"
+    r"semrush|ahrefs|mj12bot|dotbot|petalbot",
+    _re.IGNORECASE,
+)
+
+
+def _is_bot(request: Request) -> bool:
+    ua = request.headers.get("user-agent", "")
+    return bool(_BOT_UA_RE.search(ua))
+
+
+def _country(request: Request) -> str:
+    """Extract ISO 3166-1 alpha-2 country from Cloudflare header; default XX."""
+    cf = request.headers.get("CF-IPCountry", "XX").strip().upper()
+    return cf if len(cf) == 2 and cf.isalpha() else "XX"
+
+
+async def _record_view(
+    conn: asyncpg.Connection, post_id: int, slug: str, request: Request
+) -> None:
+    """Upsert a view into post_views and increment the Prometheus counter."""
+    country = _country(request)
+    bot = _is_bot(request)
+    try:
+        await conn.execute(
+            """
+            INSERT INTO post_views (post_id, viewed_on, country, is_bot, view_count)
+            VALUES ($1, CURRENT_DATE, $2, $3, 1)
+            ON CONFLICT (post_id, viewed_on, country, is_bot)
+            DO UPDATE SET view_count = post_views.view_count + 1
+            """,
+            post_id, country, bot,
+        )
+    except asyncpg.PostgresError as exc:
+        # Non-fatal — log and continue; don't fail the post request over analytics
+        log.warning("_record_view failed for post_id=%s: %s", post_id, exc)
+    _counter_post_views.labels(slug=slug, country=country, is_bot=str(bot)).inc()
 
 
 def _require_admin_key(request: Request) -> None:
@@ -197,7 +264,9 @@ async def list_posts(
 
 
 @router.get("/posts/{slug}", response_model=PostDetail)
-async def get_post(slug: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
+async def get_post(
+    slug: str, request: Request, conn: asyncpg.Connection = Depends(get_pg_conn)
+):
     """Return a single published post with full HTML content, tags, and categories."""
     try:
         row = await conn.fetchrow(
@@ -218,6 +287,7 @@ async def get_post(slug: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
     except asyncpg.PostgresError as exc:
         raise _db_error(exc, f"get_post({slug})")
 
+    await _record_view(conn, row["id"], slug, request)
     return PostDetail(**dict(row), tags=tags, categories=categories)
 
 
@@ -274,6 +344,116 @@ async def related_posts(
         raise _db_error(exc, f"related_posts({slug})")
 
     return [PostSummary(**dict(r)) for r in rows]
+
+
+@router.get("/posts/{slug}/stats", response_model=PostStatsDetail)
+async def get_post_stats(
+    slug: str,
+    conn: asyncpg.Connection = Depends(get_pg_conn),
+    _: None = Depends(_require_admin_key),
+):
+    """Per-post view stats: daily breakdown, country breakdown, bot split."""
+    try:
+        post = await conn.fetchrow(
+            "SELECT id, title FROM posts WHERE slug = $1 AND status = 'published'",
+            slug,
+        )
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found.")
+
+        post_id = post["id"]
+
+        totals = await conn.fetchrow(
+            """
+            SELECT
+                COALESCE(SUM(view_count) FILTER (WHERE viewed_on >= CURRENT_DATE - 6
+                    AND NOT is_bot), 0)                    AS views_7d,
+                COALESCE(SUM(view_count) FILTER (WHERE viewed_on >= CURRENT_DATE - 29
+                    AND NOT is_bot), 0)                    AS views_30d,
+                COALESCE(SUM(view_count) FILTER (WHERE NOT is_bot), 0) AS views_all,
+                COALESCE(SUM(view_count) FILTER (WHERE is_bot), 0)     AS bot_views_all
+            FROM post_views WHERE post_id = $1
+            """,
+            post_id,
+        )
+
+        daily_rows = await conn.fetch(
+            """
+            SELECT viewed_on,
+                   COALESCE(SUM(view_count) FILTER (WHERE NOT is_bot), 0) AS views,
+                   COALESCE(SUM(view_count) FILTER (WHERE is_bot), 0)     AS bot_views
+            FROM post_views WHERE post_id = $1
+            GROUP BY viewed_on ORDER BY viewed_on DESC LIMIT 90
+            """,
+            post_id,
+        )
+
+        country_rows = await conn.fetch(
+            """
+            SELECT country, SUM(view_count) AS views
+            FROM post_views
+            WHERE post_id = $1 AND NOT is_bot
+            GROUP BY country ORDER BY views DESC LIMIT 20
+            """,
+            post_id,
+        )
+
+    except HTTPException:
+        raise
+    except asyncpg.PostgresError as exc:
+        raise _db_error(exc, f"get_post_stats({slug})")
+
+    return PostStatsDetail(
+        slug=slug,
+        title=post["title"],
+        views_7d=totals["views_7d"],
+        views_30d=totals["views_30d"],
+        views_all=totals["views_all"],
+        bot_views_all=totals["bot_views_all"],
+        daily=[PostViewDay(date=r["viewed_on"], views=r["views"], bot_views=r["bot_views"]) for r in daily_rows],
+        top_countries=[PostCountryBreakdown(country=r["country"], views=r["views"]) for r in country_rows],
+    )
+
+
+@router.get("/stats", response_model=list[PostStatsSummary])
+async def get_blog_stats(
+    period: str = Query(default="30d", pattern=r"^(7d|30d|all)$"),
+    limit: int = Query(default=20, ge=1, le=100),
+    include_bots: bool = Query(default=False),
+    conn: asyncpg.Connection = Depends(get_pg_conn),
+    _: None = Depends(_require_admin_key),
+):
+    """Top posts by human views for a given period (7d, 30d, all)."""
+    date_filter = {
+        "7d":  "AND pv.viewed_on >= CURRENT_DATE - 6",
+        "30d": "AND pv.viewed_on >= CURRENT_DATE - 29",
+        "all": "",
+    }[period]
+    bot_filter = "" if include_bots else "AND NOT pv.is_bot"
+
+    try:
+        rows = await conn.fetch(
+            f"""
+            SELECT p.slug, p.title,
+                COALESCE(SUM(pv.view_count) FILTER (
+                    WHERE pv.viewed_on >= CURRENT_DATE - 6 AND NOT pv.is_bot), 0)  AS views_7d,
+                COALESCE(SUM(pv.view_count) FILTER (
+                    WHERE pv.viewed_on >= CURRENT_DATE - 29 AND NOT pv.is_bot), 0) AS views_30d,
+                COALESCE(SUM(pv.view_count) FILTER (WHERE NOT pv.is_bot), 0)       AS views_all,
+                COALESCE(SUM(pv.view_count) FILTER (WHERE pv.is_bot), 0)           AS bot_views_all
+            FROM posts p
+            JOIN post_views pv ON pv.post_id = p.id
+            WHERE p.status = 'published' {date_filter} {bot_filter}
+            GROUP BY p.id, p.slug, p.title
+            ORDER BY views_all DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    except asyncpg.PostgresError as exc:
+        raise _db_error(exc, "get_blog_stats")
+
+    return [PostStatsSummary(**dict(r)) for r in rows]
 
 
 @router.get("/posts/{slug}/revisions", response_model=list[PostRevisionOut])
