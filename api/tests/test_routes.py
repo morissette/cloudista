@@ -85,6 +85,38 @@ class TestMetrics:
         assert "cloudista_posts_unlisted_total" in resp.text
         assert "cloudista_posts_total" in resp.text
 
+    def test_metrics_contains_post_views_db_gauge(self, client):
+        c, _ = client
+        resp = c.get("/metrics")
+        assert "cloudista_post_views_db_total" in resp.text
+
+    def test_seed_post_view_metrics_increments_counter(self):
+        """_seed_post_view_metrics pre-seeds the counter from DB rows."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from blog_routes import _counter_post_views
+        from main import _seed_post_view_metrics
+
+        fake_rows = [
+            {"slug": "my-post", "country": "US", "is_bot": False, "total": 42},
+            {"slug": "my-post", "country": "CA", "is_bot": True,  "total": 3},
+        ]
+        mock_conn = AsyncMock()
+        mock_conn.fetch = AsyncMock(side_effect=[fake_rows, []])  # seed query, then gauge query
+        mock_pool = MagicMock()
+        mock_pool.acquire = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=mock_conn),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+
+        with patch("main._pg_pool", mock_pool, create=True), \
+             patch("dependencies._pg_pool", mock_pool):
+            asyncio.run(_seed_post_view_metrics())
+
+        val = _counter_post_views.labels(slug="my-post", country="US", is_bot="False")._value.get()
+        assert val >= 42
+
 
 # ---------------------------------------------------------------------------
 # Subscribe — pass paths
