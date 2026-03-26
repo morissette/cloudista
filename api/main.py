@@ -141,9 +141,17 @@ _gauge_subscribers = Gauge(
     "cloudista_subscribers_total",
     "Total number of confirmed email subscribers",
 )
-_gauge_posts = Gauge(
+_gauge_posts_published = Gauge(
     "cloudista_posts_published_total",
-    "Total number of published blog posts",
+    "Number of published blog posts",
+)
+_gauge_posts_unlisted = Gauge(
+    "cloudista_posts_unlisted_total",
+    "Number of unlisted blog posts",
+)
+_gauge_posts_total = Gauge(
+    "cloudista_posts_total",
+    "Total number of blog posts (all statuses)",
 )
 
 # boto3 picks up credentials from the EC2 instance's IAM role automatically.
@@ -398,13 +406,21 @@ async def health():
                 sub_count = await conn.fetchval(
                     "SELECT COUNT(*) FROM subscribers WHERE status = 'confirmed'"
                 )
-                post_count = await conn.fetchval(
-                    "SELECT COUNT(*) FROM posts WHERE status = 'published'"
+                post_counts = await conn.fetchrow(
+                    """
+                    SELECT
+                        COUNT(*) FILTER (WHERE status = 'published') AS published,
+                        COUNT(*) FILTER (WHERE status = 'unlisted')  AS unlisted,
+                        COUNT(*)                                      AS total
+                    FROM posts
+                    """
                 )
                 if sub_count is not None:
                     _gauge_subscribers.set(sub_count)
-                if post_count is not None:
-                    _gauge_posts.set(post_count)
+                if post_counts is not None:
+                    _gauge_posts_published.set(post_counts["published"])
+                    _gauge_posts_unlisted.set(post_counts["unlisted"])
+                    _gauge_posts_total.set(post_counts["total"])
             except Exception:
                 pass  # gauge refresh is best-effort; don't fail health check
     except Exception as exc:
