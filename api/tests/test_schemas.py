@@ -1,7 +1,7 @@
 """Tests for Pydantic schemas — validation rules and edge cases."""
 import pytest
 from pydantic import ValidationError
-from schemas import HealthOut, MessageOut, SubscribeIn
+from schemas import HealthOut, MessageOut, SubscribeIn, SubscribeSource
 
 # ── SubscribeIn ────────────────────────────────────────────────────────────────
 
@@ -9,16 +9,16 @@ class TestSubscribeIn:
     def test_valid_minimal(self):
         s = SubscribeIn(email="user@example.com")
         assert s.email == "user@example.com"
-        assert s.source == "coming_soon"
+        assert s.source == SubscribeSource.COMING_SOON
         assert s.cf_turnstile_token is None
 
     def test_valid_full(self):
         s = SubscribeIn(
             email="user@example.com",
-            source="blog_footer",
+            source="blog",
             cf_turnstile_token="tok123",
         )
-        assert s.source == "blog_footer"
+        assert s.source == SubscribeSource.BLOG
         assert s.cf_turnstile_token == "tok123"
 
     def test_invalid_email(self):
@@ -30,13 +30,14 @@ class TestSubscribeIn:
         with pytest.raises(ValidationError):
             SubscribeIn(email="")
 
-    def test_source_max_length(self):
+    def test_invalid_source_rejected(self):
         with pytest.raises(ValidationError):
-            SubscribeIn(email="a@b.com", source="x" * 101)
+            SubscribeIn(email="a@b.com", source="unknown_source")
 
-    def test_source_at_max_length(self):
-        s = SubscribeIn(email="a@b.com", source="x" * 100)
-        assert len(s.source) == 100
+    def test_all_valid_sources_accepted(self):
+        for src in SubscribeSource:
+            s = SubscribeIn(email="a@b.com", source=src.value)
+            assert s.source == src
 
     def test_turnstile_token_max_length(self):
         with pytest.raises(ValidationError):
