@@ -91,6 +91,42 @@ def blog_client():
 
 
 # ---------------------------------------------------------------------------
+# _db_error() helper — unit tests (no routing needed)
+# ---------------------------------------------------------------------------
+
+class TestDbErrorHelper:
+    def test_generic_error_returns_500(self):
+        import asyncpg
+        from blog_routes import _db_error
+        exc = asyncpg.PostgresError("query error")
+        result = _db_error(exc, "test")
+        assert result.status_code == 500
+
+    def test_transient_sqlstate_string_returns_503(self):
+        import asyncpg
+        from blog_routes import _db_error
+        exc = asyncpg.PostgresError("too many connections")
+        exc.sqlstate = "53300"
+        result = _db_error(exc, "test")
+        assert result.status_code == 503
+
+    def test_transient_sqlstate_bytes_returns_503(self):
+        import asyncpg
+        from blog_routes import _db_error
+        exc = asyncpg.PostgresError("connection failure")
+        exc.sqlstate = b"08006"
+        result = _db_error(exc, "test")
+        assert result.status_code == 503
+
+    def test_no_sqlstate_returns_500(self):
+        import asyncpg
+        from blog_routes import _db_error
+        exc = asyncpg.PostgresError("unknown error")
+        result = _db_error(exc, "test")
+        assert result.status_code == 500
+
+
+# ---------------------------------------------------------------------------
 # /api/posts — list posts
 # ---------------------------------------------------------------------------
 
@@ -147,6 +183,7 @@ class TestListPosts:
         conn.fetchval = AsyncMock(side_effect=asyncpg.PostgresError("boom"))
         resp = c.get("/api/posts")
         assert resp.status_code == 500
+
 
     def test_empty_result(self, blog_client):
         c, conn = blog_client

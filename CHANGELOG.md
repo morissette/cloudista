@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — distinguish transient vs permanent DB errors in blog routes
+
+### Changed
+- `api/blog_routes.py` — added `_TRANSIENT_PG_ERRORS` tuple and `_db_error()` helper; all `asyncpg.PostgresError` handlers now return 503 for connection failures and 500 for logic/schema errors
+- `api/tests/conftest.py` — added `ConnectionDoesNotExistError`, `ConnectionFailureError`, `CannotConnectNowError` to asyncpg stub
+- `api/tests/test_blog_routes.py` — added `test_transient_db_error_returns_503` for list_posts
+
+---
+
 ## [2026-03-25] — type hints and tests for blog tooling scripts
 
 ### Changed
