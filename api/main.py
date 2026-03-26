@@ -570,28 +570,13 @@ async def preferences_page(token: str, saved: str = "", conn: asyncpg.Connection
     if not row:
         return _prefs_html_response("", "weekly", token, error="Link not found or already unsubscribed.")
 
-    # Auto-rotate expired token — generate a new one, update DB, redirect transparently
     if (
         row["prefs_token_expires_at"] is not None
         and row["prefs_token_expires_at"] < datetime.now(timezone.utc)
     ):
-        new_pt = _make_token()
-        try:
-            await conn.execute(
-                "UPDATE subscribers SET prefs_token = $1, prefs_token_expires_at = $2 WHERE id = $3",
-                new_pt,
-                datetime.now(timezone.utc) + _PREFS_TOKEN_TTL,
-                row["id"],
-            )
-        except Exception as exc:
-            log.error("prefs token rotate error: %s", exc)
-            return _prefs_html_response(
-                "", "weekly", token,
-                error="Link expired. Check your most recent email for a new preferences link.",
-            )
-        return RedirectResponse(
-            url=f"{settings.site_url}/api/preferences/{new_pt}",
-            status_code=302,
+        return _prefs_html_response(
+            "", "weekly", token,
+            error="Your preferences link has expired. Check your most recent email for a new one.",
         )
 
     return _prefs_html_response(row["email"], row["frequency"], token, saved=saved)
