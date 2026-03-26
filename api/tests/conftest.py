@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 os.environ.setdefault("BLOG_DB_PASSWORD", "test-password")
 os.environ.setdefault("BLOG_DB_HOST", "localhost")
 os.environ.setdefault("TURNSTILE_SECRET", "")
+os.environ.setdefault("ADMIN_KEY", "test-admin-key")
 
 
 def _make_asyncpg_stub():
