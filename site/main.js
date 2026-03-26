@@ -180,3 +180,120 @@ if (modal && subscribeBtn) {
     }
   }
 }
+
+// ── Contact / work-with-me form ────────────────────────────────────────────────
+const contactForm = document.getElementById('contact-form');
+
+if (contactForm) {
+  const TURNSTILE_SITE_KEY = '0x4AAAAAACiMVM_vMYh7m0Bf';
+
+  const nameInput      = document.getElementById('contact-name');
+  const emailInput     = document.getElementById('contact-email');
+  const companyInput   = document.getElementById('contact-company');
+  const engagementSel  = document.getElementById('contact-engagement');
+  const situationInput = document.getElementById('contact-situation');
+  const submitBtn      = document.getElementById('contact-submit');
+  const errorEl        = document.getElementById('contact-error');
+  const successEl      = document.getElementById('contact-success');
+
+  // Bot heuristics (same approach as subscribe form)
+  const _ch = { pageLoad: Date.now(), firstInput: null, hadPointer: false, hadKey: false };
+  document.addEventListener('mousemove',  () => { _ch.hadPointer = true; }, { once: true, passive: true });
+  document.addEventListener('touchstart', () => { _ch.hadPointer = true; }, { once: true, passive: true });
+  [nameInput, emailInput, situationInput].forEach(el => {
+    if (!el) return;
+    el.addEventListener('keydown', () => { _ch.hadKey = true; if (!_ch.firstInput) _ch.firstInput = Date.now(); }, { once: true });
+    el.addEventListener('paste',   () => { _ch.hadKey = true; if (!_ch.firstInput) _ch.firstInput = Date.now(); }, { once: true });
+  });
+
+  function isContactSuspicious() {
+    const hp = document.getElementById('contact-website');
+    if (hp && hp.value) return true;
+    const now = Date.now();
+    if (now - _ch.pageLoad < 3000) return true;
+    if (_ch.firstInput && now - _ch.firstInput < 1500) return true;
+    if (!_ch.hadPointer && !_ch.hadKey) return true;
+    return false;
+  }
+
+  // Turnstile (lazy — only when suspicious)
+  let _cToken = null;
+  let _cReady = false;
+
+  window._onContactCaptchaSolve = (token) => { _cToken = token; _doContactSubmit(); };
+
+  function _showContactCaptcha() {
+    const wrap = document.getElementById('contact-captcha-wrap');
+    if (!wrap) return;
+    wrap.style.display = 'block';
+    if (_cReady) return;
+    const s = document.createElement('script');
+    s.src   = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    s.async = true;
+    s.onload = () => {
+      turnstile.render('#contact-captcha-wrap', {
+        sitekey:            TURNSTILE_SITE_KEY,
+        theme:              'light',
+        callback:           window._onContactCaptchaSolve,
+        'expired-callback': () => { _cToken = null; },
+        'error-callback':   () => { _cToken = null; },
+      });
+      _cReady = true;
+    };
+    document.head.appendChild(s);
+  }
+
+  function showContactError(msg) {
+    if (!errorEl) return;
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+  }
+
+  contactForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+
+    if (!nameInput?.value.trim())     { showContactError('Please enter your name.'); nameInput?.focus(); return; }
+    if (!emailInput?.checkValidity()) { showContactError('Please enter a valid email address.'); emailInput?.focus(); return; }
+    if (!situationInput?.value.trim() || situationInput.value.trim().length < 10) {
+      showContactError('Please describe your situation (at least 10 characters).'); situationInput?.focus(); return;
+    }
+
+    if (isContactSuspicious() && !_cToken) { _showContactCaptcha(); return; }
+    _doContactSubmit();
+  });
+
+  async function _doContactSubmit() {
+    submitBtn.disabled    = true;
+    submitBtn.textContent = 'Sending…';
+
+    try {
+      const payload = {
+        name:      nameInput.value.trim(),
+        email:     emailInput.value.trim(),
+        company:   companyInput?.value.trim() || '',
+        engagement: engagementSel?.value || '',
+        situation: situationInput.value.trim(),
+      };
+      if (_cToken) payload.cf_turnstile_token = _cToken;
+
+      const res  = await fetch('/api/contact', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Something went wrong. Please try again.');
+
+      contactForm.style.display = 'none';
+      document.getElementById('contact-captcha-wrap')?.style.setProperty('display', 'none');
+      if (successEl) successEl.classList.add('visible');
+
+    } catch (err) {
+      submitBtn.disabled    = false;
+      submitBtn.textContent = 'Send message →';
+      _cToken = null;
+      showContactError(err.message);
+    }
+  }
+}
