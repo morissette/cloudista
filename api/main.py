@@ -576,9 +576,9 @@ async def preferences_page(token: str, saved: str = "", conn: asyncpg.Connection
             " FROM subscribers WHERE prefs_token = $1 AND status = 'confirmed' LIMIT 1",
             token,
         )
-    except Exception as exc:
-        log.error("preferences_page error: %s", exc)
-        row = None
+    except asyncpg.PostgresError as exc:
+        log.error("preferences_page DB error: %s", exc)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable.")
 
     if not row:
         return _prefs_html_response("", "weekly", token, error="Link not found or already unsubscribed.")
