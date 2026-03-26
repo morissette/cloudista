@@ -132,7 +132,7 @@ REMOTE
   PREV_IMAGE=$(ssh_cmd "sudo docker inspect --format='{{.Image}}' $CONTAINER 2>/dev/null || true")
 
   step "Building Docker image..."
-  ssh_cmd "cd $REMOTE_API && sudo docker build -t $CONTAINER . 2>&1 | tail -5"
+  ssh_cmd "cd $REMOTE_API && sudo docker build -t $CONTAINER ."
   ok "Image built: $CONTAINER"
 
   step "Restarting API container..."
