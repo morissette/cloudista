@@ -808,7 +808,24 @@ _POST_HTML_TEMPLATE = """\
         </div>
         Cloudista
       </a>
-      <nav class="site-nav" aria-label="Site navigation">
+      <button class="nav-toggle" id="nav-toggle" type="button"
+              aria-label="Open navigation" aria-expanded="false"
+              aria-controls="site-nav">
+        <svg class="icon-open" width="20" height="20" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" aria-hidden="true">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+        <svg class="icon-close" width="20" height="20" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <nav class="site-nav" id="site-nav" aria-label="Site navigation">
         <a href="/archive">Archive</a>
         <a href="/work-with-me">Work with me</a>
         <a href="/feed.xml" class="nav-rss" aria-label="RSS feed">

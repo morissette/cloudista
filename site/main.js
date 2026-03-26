@@ -1,5 +1,27 @@
 'use strict';
 
+// ── Mobile nav hamburger ────────────────────────────────────────────────────────
+(function () {
+  const toggle = document.getElementById('nav-toggle');
+  if (!toggle) return;
+  const header = toggle.closest('.site-header');
+
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    const open = header.classList.toggle('nav-open');
+    toggle.setAttribute('aria-expanded', open);
+    toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!header.contains(e.target) && header.classList.contains('nav-open')) {
+      header.classList.remove('nav-open');
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.setAttribute('aria-label', 'Open navigation');
+    }
+  });
+}());
+
 // ── Confirmation banner ────────────────────────────────────────────────────────
 const BANNER_MESSAGES = {
   '1':       { cls: 'confirm-banner--success', text: '🎉 You\'re confirmed! Welcome to Cloudista.' },
