@@ -78,6 +78,13 @@ class TestMetrics:
         resp = c.get("/metrics")
         assert "http_requests" in resp.text or "http_request" in resp.text
 
+    def test_metrics_contains_post_gauges(self, client):
+        c, _ = client
+        resp = c.get("/metrics")
+        assert "cloudista_posts_published_total" in resp.text
+        assert "cloudista_posts_unlisted_total" in resp.text
+        assert "cloudista_posts_total" in resp.text
+
 
 # ---------------------------------------------------------------------------
 # Subscribe — pass paths
