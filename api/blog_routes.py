@@ -881,7 +881,8 @@ def _render_post_html(row: dict, tags: list, categories: list) -> str:
     pub = row.get("published_at")
 
     post_url = f"{_SITE_ROOT}/blog/{slug}"
-    og_image = image if image else f"{_SITE_ROOT}/og-image.png"
+    _img = image if image else "/og-image.png"
+    og_image = _img if _img.startswith("http") else f"{_SITE_ROOT}{_img}"
 
     pub_date = pub.strftime("%Y-%m-%d") if pub else ""
     pub_date_display = f"{pub.strftime('%B')} {pub.day}, {pub.year}" if pub else ""
@@ -933,6 +934,12 @@ def _render_post_html(row: dict, tags: list, categories: list) -> str:
         content_html=c_html,
         google_fonts_url=_GOOGLE_FONTS_URL,
     )
+
+
+@html_router.head("/blog/{slug}", include_in_schema=False)
+async def head_post_page(slug: str):
+    """HEAD handler so crawlers see Content-Type: text/html (not FastAPI's default JSON)."""
+    return Response(status_code=200, headers={"Content-Type": "text/html; charset=utf-8"})
 
 
 @html_router.get("/blog/{slug}", response_class=HTMLResponse, include_in_schema=False)
