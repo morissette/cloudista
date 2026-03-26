@@ -121,9 +121,10 @@ app.add_middleware(
     allow_origins=[
         settings.site_url,
         f"https://www.{settings.site_url.removeprefix('https://')}",
+        "null",  # file:// origin for local admin tools
     ],
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Admin-Key"],
     max_age=3600,
 )
 
