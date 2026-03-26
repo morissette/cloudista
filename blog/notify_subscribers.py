@@ -13,9 +13,12 @@ Usage:
   POPULATE_DB_DSN="postgresql://..." python3 notify_subscribers.py --mode digest --dry-run
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import os
+from typing import Any
 
 import boto3
 import psycopg2
@@ -35,11 +38,11 @@ AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 SITE_URL = os.environ.get("SITE_URL", "https://cloudista.org")
 
 
-def _ses_client():
+def _ses_client() -> Any:
     return boto3.client("ses", region_name=AWS_REGION)
 
 
-def _send(ses, to_email: str, subject: str, html: str, text: str, dry_run: bool) -> bool:
+def _send(ses: Any, to_email: str, subject: str, html: str, text: str, dry_run: bool) -> bool:
     if dry_run:
         log.info("[dry-run] Would send %r to %s", subject, to_email)
         return True
@@ -61,7 +64,7 @@ def _send(ses, to_email: str, subject: str, html: str, text: str, dry_run: bool)
         return False
 
 
-def run_immediate(conn, ses, dry_run: bool) -> None:
+def run_immediate(conn: Any, ses: Any, dry_run: bool) -> None:
     """Send each unnotified published post to immediate-frequency subscribers."""
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
@@ -111,7 +114,7 @@ def run_immediate(conn, ses, dry_run: bool) -> None:
             conn.commit()
 
 
-def run_digest(conn, ses, dry_run: bool) -> None:
+def run_digest(conn: Any, ses: Any, dry_run: bool) -> None:
     """Send weekly digest to subscribers whose last_digest_at is due."""
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
@@ -172,7 +175,7 @@ def run_digest(conn, ses, dry_run: bool) -> None:
             log.warning("  Failed to send digest to %s", sub["email"])
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Send cloudista.org subscriber notifications")
     parser.add_argument("--mode", choices=["immediate", "digest"], required=True)
     parser.add_argument("--dry-run", action="store_true", help="Print what would be sent without sending")

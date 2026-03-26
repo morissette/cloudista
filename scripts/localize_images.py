@@ -25,6 +25,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 import psycopg2
 import psycopg2.extras
@@ -108,7 +109,7 @@ def download(url: str, dest: Path, dry_run: bool = False) -> str | None:
         return None
 
 
-def fix_extensions(images_dir: str, dry_run: bool, conn) -> None:
+def fix_extensions(images_dir: str, dry_run: bool, conn: Any) -> None:
     """Rename files whose extension doesn't match their actual format and update DB."""
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     fixed = 0
