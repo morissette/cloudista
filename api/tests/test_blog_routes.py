@@ -409,10 +409,9 @@ class TestRelatedPosts:
 
 class TestIsBotHelper:
     def test_known_bot_ua_returns_true(self):
-        from blog_routes import _is_bot
-        from fastapi.testclient import TestClient
         from unittest.mock import MagicMock
 
+        from blog_routes import _is_bot
         req = MagicMock()
         req.headers.get = lambda k, d="": {
             "user-agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
@@ -420,15 +419,17 @@ class TestIsBotHelper:
         assert _is_bot(req) is True
 
     def test_gptbot_returns_true(self):
-        from blog_routes import _is_bot
         from unittest.mock import MagicMock
+
+        from blog_routes import _is_bot
         req = MagicMock()
         req.headers.get = lambda k, d="": {"user-agent": "GPTBot/1.0"}.get(k, d)
         assert _is_bot(req) is True
 
     def test_browser_ua_returns_false(self):
-        from blog_routes import _is_bot
         from unittest.mock import MagicMock
+
+        from blog_routes import _is_bot
         req = MagicMock()
         req.headers.get = lambda k, d="": {
             "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
@@ -436,8 +437,9 @@ class TestIsBotHelper:
         assert _is_bot(req) is False
 
     def test_empty_ua_returns_false(self):
-        from blog_routes import _is_bot
         from unittest.mock import MagicMock
+
+        from blog_routes import _is_bot
         req = MagicMock()
         req.headers.get = lambda k, d="": d
         assert _is_bot(req) is False
@@ -445,36 +447,41 @@ class TestIsBotHelper:
 
 class TestCountryHelper:
     def test_valid_country_code(self):
-        from blog_routes import _country
         from unittest.mock import MagicMock
+
+        from blog_routes import _country
         req = MagicMock()
         req.headers.get = lambda k, d="XX": {"CF-IPCountry": "US"}.get(k, d)
         assert _country(req) == "US"
 
     def test_lowercase_is_uppercased(self):
-        from blog_routes import _country
         from unittest.mock import MagicMock
+
+        from blog_routes import _country
         req = MagicMock()
         req.headers.get = lambda k, d="XX": {"CF-IPCountry": "gb"}.get(k, d)
         assert _country(req) == "GB"
 
     def test_missing_header_defaults_xx(self):
-        from blog_routes import _country
         from unittest.mock import MagicMock
+
+        from blog_routes import _country
         req = MagicMock()
         req.headers.get = lambda k, d="XX": d
         assert _country(req) == "XX"
 
     def test_invalid_code_defaults_xx(self):
-        from blog_routes import _country
         from unittest.mock import MagicMock
+
+        from blog_routes import _country
         req = MagicMock()
         req.headers.get = lambda k, d="XX": {"CF-IPCountry": "123"}.get(k, d)
         assert _country(req) == "XX"
 
     def test_too_long_code_defaults_xx(self):
-        from blog_routes import _country
         from unittest.mock import MagicMock
+
+        from blog_routes import _country
         req = MagicMock()
         req.headers.get = lambda k, d="XX": {"CF-IPCountry": "USA"}.get(k, d)
         assert _country(req) == "XX"

@@ -366,10 +366,12 @@ async def get_post_stats(
         totals = await conn.fetchrow(
             """
             SELECT
-                COALESCE(SUM(view_count) FILTER (WHERE viewed_on >= CURRENT_DATE - 6  AND NOT is_bot), 0) AS views_7d,
-                COALESCE(SUM(view_count) FILTER (WHERE viewed_on >= CURRENT_DATE - 29 AND NOT is_bot), 0) AS views_30d,
-                COALESCE(SUM(view_count) FILTER (WHERE NOT is_bot), 0)                                    AS views_all,
-                COALESCE(SUM(view_count) FILTER (WHERE is_bot), 0)                                        AS bot_views_all
+                COALESCE(SUM(view_count) FILTER (WHERE viewed_on >= CURRENT_DATE - 6
+                    AND NOT is_bot), 0)                    AS views_7d,
+                COALESCE(SUM(view_count) FILTER (WHERE viewed_on >= CURRENT_DATE - 29
+                    AND NOT is_bot), 0)                    AS views_30d,
+                COALESCE(SUM(view_count) FILTER (WHERE NOT is_bot), 0) AS views_all,
+                COALESCE(SUM(view_count) FILTER (WHERE is_bot), 0)     AS bot_views_all
             FROM post_views WHERE post_id = $1
             """,
             post_id,
@@ -433,10 +435,12 @@ async def get_blog_stats(
         rows = await conn.fetch(
             f"""
             SELECT p.slug, p.title,
-                COALESCE(SUM(pv.view_count) FILTER (WHERE pv.viewed_on >= CURRENT_DATE - 6  AND NOT pv.is_bot), 0) AS views_7d,
-                COALESCE(SUM(pv.view_count) FILTER (WHERE pv.viewed_on >= CURRENT_DATE - 29 AND NOT pv.is_bot), 0) AS views_30d,
-                COALESCE(SUM(pv.view_count) FILTER (WHERE NOT pv.is_bot), 0)                                       AS views_all,
-                COALESCE(SUM(pv.view_count) FILTER (WHERE pv.is_bot), 0)                                           AS bot_views_all
+                COALESCE(SUM(pv.view_count) FILTER (
+                    WHERE pv.viewed_on >= CURRENT_DATE - 6 AND NOT pv.is_bot), 0)  AS views_7d,
+                COALESCE(SUM(pv.view_count) FILTER (
+                    WHERE pv.viewed_on >= CURRENT_DATE - 29 AND NOT pv.is_bot), 0) AS views_30d,
+                COALESCE(SUM(pv.view_count) FILTER (WHERE NOT pv.is_bot), 0)       AS views_all,
+                COALESCE(SUM(pv.view_count) FILTER (WHERE pv.is_bot), 0)           AS bot_views_all
             FROM posts p
             JOIN post_views pv ON pv.post_id = p.id
             WHERE p.status = 'published' {date_filter} {bot_filter}
