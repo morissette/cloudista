@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — type hints and tests for blog tooling scripts
+
+### Changed
+- `blog/notify_subscribers.py` — added `from __future__ import annotations`, `from typing import Any`; annotated `_ses_client`, `_send`, `run_immediate`, `run_digest`, and `main` with return types
+- `scripts/localize_images.py` — added `from typing import Any`; annotated `fix_extensions` `conn` parameter
+
+### Added
+- `blog/tests/test_notify_subscribers.py` — 9 tests covering `_send` (dry-run, success, exception) and `run_immediate`/`run_digest` (no-op cases, email dispatch, dry-run guard)
+- `scripts/tests/test_localize_images.py` — 19 tests covering `is_external`, `detect_ext`, `ext_for_url`, and `download` (dry-run, success, failure)
+
+---
+
 ## [2026-03-25] — request ID propagated into log records
 
 ### Changed
