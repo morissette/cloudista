@@ -46,7 +46,7 @@ jobs:
             CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "all")
             API_CHANGED=false
             SITE_CHANGED=false
-            echo "$CHANGED" | grep -q "^api/" && API_CHANGED=true
+            echo "$CHANGED" | grep -qE "^api/|^deploy\.sh$" && API_CHANGED=true
             echo "$CHANGED" | grep -qE "^(site/|blog-site/|blog/|infra/|images/)" && SITE_CHANGED=true
             if $API_CHANGED && $SITE_CHANGED; then
               echo "flag=" >> $GITHUB_OUTPUT      # both changed → full
