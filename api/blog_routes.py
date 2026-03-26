@@ -194,7 +194,7 @@ async def search_posts(
     try:
         total = await conn.fetchval(
             "SELECT COUNT(*) FROM posts p JOIN authors a ON a.id = p.author_id"
-            " WHERE p.status = 'published' AND p.published_at <= NOW()"
+            " WHERE p.status IN ('published', 'unlisted') AND p.published_at <= NOW()"
             " AND (p.title ILIKE $1 OR p.excerpt ILIKE $1 OR p.slug ILIKE $1)",
             term,
         )
@@ -202,7 +202,7 @@ async def search_posts(
             "SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,"
             " p.image_url, a.name AS author, p.published_at"
             " FROM posts p JOIN authors a ON a.id = p.author_id"
-            " WHERE p.status = 'published' AND p.published_at <= NOW()"
+            " WHERE p.status IN ('published', 'unlisted') AND p.published_at <= NOW()"
             " AND (p.title ILIKE $1 OR p.excerpt ILIKE $1 OR p.slug ILIKE $1)"
             " ORDER BY p.published_at DESC LIMIT $2 OFFSET $3",
             term,
@@ -288,6 +288,43 @@ async def list_posts(
     )
 
 
+@router.get("/archive", response_model=PostList)
+async def list_archive(
+    response: Response,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    conn: asyncpg.Connection = Depends(get_pg_conn),
+):
+    """Return a paginated list of unlisted (archived) posts, oldest first."""
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
+    offset = (page - 1) * per_page
+
+    try:
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM posts p JOIN authors a ON a.id = p.author_id"
+            " WHERE p.status = 'unlisted' AND p.published_at <= NOW()"
+        )
+        rows = await conn.fetch(
+            "SELECT p.id, p.uuid::text, p.title, p.slug, p.excerpt,"
+            " p.image_url, a.name AS author, p.published_at"
+            " FROM posts p JOIN authors a ON a.id = p.author_id"
+            " WHERE p.status = 'unlisted' AND p.published_at <= NOW()"
+            " ORDER BY p.published_at ASC LIMIT $1 OFFSET $2",
+            per_page,
+            offset,
+        )
+    except asyncpg.PostgresError as exc:
+        raise _db_error(exc, "list_archive")
+
+    return PostList(
+        posts=[PostSummary(**dict(row)) for row in rows],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=(-(-total // per_page)),
+    )
+
+
 @router.get("/posts/{slug}", response_model=PostDetail)
 async def get_post(
     slug: str, request: Request, conn: asyncpg.Connection = Depends(get_pg_conn)
@@ -299,7 +336,7 @@ async def get_post(
             " p.image_url, p.image_credit, p.content_html,"
             " a.name AS author, p.published_at"
             " FROM posts p JOIN authors a ON a.id = p.author_id"
-            " WHERE p.slug = $1 AND p.status = 'published' AND p.published_at <= NOW()",
+            " WHERE p.slug = $1 AND p.status IN ('published', 'unlisted') AND p.published_at <= NOW()",
             slug,
         )
         if not row:
@@ -326,7 +363,7 @@ async def related_posts(
     ranked by shared category + tag overlap."""
     try:
         post = await conn.fetchrow(
-            "SELECT id FROM posts WHERE slug = $1 AND status = 'published' AND published_at <= NOW()",
+            "SELECT id FROM posts WHERE slug = $1 AND status IN ('published', 'unlisted') AND published_at <= NOW()",
             slug,
         )
         if not post:
@@ -380,7 +417,7 @@ async def get_post_stats(
     """Per-post view stats: daily breakdown, country breakdown, bot split."""
     try:
         post = await conn.fetchrow(
-            "SELECT id, title FROM posts WHERE slug = $1 AND status = 'published'",
+            "SELECT id, title FROM posts WHERE slug = $1 AND status IN ('published', 'unlisted')",
             slug,
         )
         if not post:
@@ -725,7 +762,7 @@ _POST_HTML_TEMPLATE = """\
   <title>{title_escaped} — Cloudista</title>
   <meta name="description" content="{desc_escaped}">
   <link rel="canonical" href="{post_url_escaped}">
-
+{robots_meta}
   <meta property="og:type"        content="article">
   <meta property="og:url"         content="{post_url_escaped}">
   <meta property="og:title"       content="{title_escaped}">
@@ -869,7 +906,7 @@ _POST_HTML_TEMPLATE = """\
 </html>"""
 
 
-def _render_post_html(row: dict, tags: list, categories: list) -> str:
+def _render_post_html(row: dict, tags: list, categories: list, unlisted: bool = False) -> str:
     e = _html.escape
     title = row.get("title") or ""
     slug = row.get("slug") or ""
@@ -921,6 +958,10 @@ def _render_post_html(row: dict, tags: list, categories: list) -> str:
     else:
         hero_html = ""
 
+    robots_meta = (
+        '  <meta name="robots" content="noindex, nofollow">' if unlisted else ""
+    )
+
     return _POST_HTML_TEMPLATE.format(
         title_escaped=e(title),
         desc_escaped=e(excerpt),
@@ -933,6 +974,7 @@ def _render_post_html(row: dict, tags: list, categories: list) -> str:
         hero_html=hero_html,
         content_html=c_html,
         google_fonts_url=_GOOGLE_FONTS_URL,
+        robots_meta=robots_meta,
     )
 
 
@@ -948,10 +990,10 @@ async def render_post_page(slug: str, conn: asyncpg.Connection = Depends(get_pg_
     try:
         row = await conn.fetchrow(
             "SELECT p.id, p.title, p.slug, p.excerpt,"
-            " p.image_url, p.image_credit, p.content_html,"
+            " p.image_url, p.image_credit, p.content_html, p.status,"
             " a.name AS author, p.published_at"
             " FROM posts p JOIN authors a ON a.id = p.author_id"
-            " WHERE p.slug = $1 AND p.status = 'published' AND p.published_at <= NOW()",
+            " WHERE p.slug = $1 AND p.status IN ('published', 'unlisted') AND p.published_at <= NOW()",
             slug,
         )
         if not row:
@@ -965,6 +1007,6 @@ async def render_post_page(slug: str, conn: asyncpg.Connection = Depends(get_pg_
         raise _db_error(exc, f"render_post_page({slug})")
 
     return HTMLResponse(
-        content=_render_post_html(dict(row), tags, categories),
+        content=_render_post_html(dict(row), tags, categories, unlisted=row["status"] == "unlisted"),
         headers={"Cache-Control": "public, max-age=600, must-revalidate"},
     )
