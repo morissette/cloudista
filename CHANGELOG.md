@@ -6,6 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — post view metrics with bot detection and geolocation
+
+### Added
+- `infra/schema.sql` — `post_views` table: daily time-series keyed on `(post_id, viewed_on, country, is_bot)` composite PK with upsert on conflict; 4 indexes including partial index for human-only queries
+- `api/blog_routes.py` — `_is_bot()` (User-Agent regex for 15+ known bots), `_country()` (Cloudflare `CF-IPCountry` header, defaults `XX`), `_record_view()` (non-fatal upsert — analytics failure never affects post delivery)
+- `api/blog_routes.py` — `GET /api/posts/{slug}/stats`: daily breakdown (90 days), top-20 countries, 7d/30d/all aggregates split by bot/human (admin key required)
+- `api/blog_routes.py` — `GET /api/stats`: top posts by views with `period` filter (`7d`/`30d`/`all`), `include_bots` flag, `limit` param (admin key required)
+- `api/blog_routes.py` — Prometheus counter `cloudista_post_views_total` with `slug`/`country`/`is_bot` labels
+- `api/schemas.py` — `PostViewDay`, `PostCountryBreakdown`, `PostStatsSummary`, `PostStatsDetail` response models
+- `api/tests/test_blog_routes.py` — 23 new tests: `_is_bot`, `_country`, stats endpoints, admin auth enforcement, error paths
+- `api/tests/conftest.py` — added `ADMIN_KEY=test-admin-key` env var for stats endpoint tests
+
+---
+
 ## [2026-03-26] — add Prometheus metrics endpoint at /metrics
 
 ### Added

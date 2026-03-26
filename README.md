@@ -211,6 +211,12 @@ Missing required variables raise a `ValidationError` at startup with a clear mes
 
 ### Analytics
 - [x] Plausible privacy-friendly analytics (all pages, no cookie banner required)
+- [x] **Post view metrics** — daily time-series in PostgreSQL; bot detection via User-Agent regex; geolocation via `CF-IPCountry` (ISO 3166-1 alpha-2)
+- [x] **Prometheus counter** `cloudista_post_views_total` with `slug`/`country`/`is_bot` labels — feeds existing Grafana dashboards
+- [x] `GET /api/posts/{slug}/stats` — daily breakdown (90 days), top-20 countries, 7d/30d/all human vs bot aggregates (admin key required)
+- [x] `GET /api/stats` — top posts by views with period filter (`7d`/`30d`/`all`), `include_bots` flag (admin key required)
+- [ ] **Analytics dashboard** — admin UI showing top posts, country heatmap, bot/human split; currently API-only
+- [ ] **Referrer tracking** — add `referrer` column to `post_views`; surface top referrers per post
 
 ---
 
