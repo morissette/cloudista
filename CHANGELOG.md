@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — cache bust main.js and style.css on all pages
+
+### Changed
+- `site/index.html`, `blog-site/index.html`, `blog-site/post.html` — `style.css` and `main.js` references now use `?v=__DEPLOY_HASH__` placeholders
+- `api/blog_routes.py` — SSR template updated with same placeholders
+- `deploy.sh` — `DEPLOY_HASH` computed once at top-level (not inside the site block) so both site and API deploys substitute correctly; `site/index.html` and SSR template substituted alongside blog HTML
+
+---
+
 ## [2026-03-25] — deploy rollback on health check failure
 
 ### Changed

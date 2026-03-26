@@ -41,35 +41,41 @@ _trust_host
 ssh_cmd() { ssh -i "$SSH_KEY" "$SSH_HOST" "$@"; }
 scp_file() { scp -i "$SSH_KEY" "$@"; }
 
+# Compute deploy hash once — used in all cache-busting sed substitutions below
+DEPLOY_HASH=$(git rev-parse --short HEAD)
+ok "Deploy hash: ${DEPLOY_HASH}"
+
 # ---------------------------------------------------------------------------
 # 1. Deploy static site files
 # ---------------------------------------------------------------------------
 if [[ "$MODE" != "--api" ]]; then
   step "Deploying static site files..."
+  # Inject hash into site/index.html so main.js and style.css URLs are cache-busted
+  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" site/index.html > /tmp/site-index.html
   # /www/ is root-owned — scp to tmp, then sudo mv into place
-  scp_file site/index.html site/style.css site/main.js site/robots.txt \
+  scp_file /tmp/site-index.html site/style.css site/main.js site/robots.txt \
     site/privacy.html site/terms.html \
     site/assets/og-image.png \
     site/assets/favicon.svg site/assets/favicon.ico site/assets/favicon-32x32.png \
     site/assets/favicon-192x192.png site/assets/apple-touch-icon.png site/assets/site.webmanifest \
     "$SSH_HOST:/tmp/"
-  ssh_cmd "sudo mv /tmp/index.html /tmp/style.css /tmp/main.js \
+  ssh_cmd "sudo mv /tmp/site-index.html $REMOTE_WEB/index.html && \
+    sudo mv /tmp/style.css /tmp/main.js \
     /tmp/robots.txt /tmp/og-image.png \
     /tmp/privacy.html /tmp/terms.html \
     /tmp/favicon.svg /tmp/favicon.ico /tmp/favicon-32x32.png \
     /tmp/favicon-192x192.png /tmp/apple-touch-icon.png /tmp/site.webmanifest \
     $REMOTE_WEB/"
-  ok "static files uploaded (incl. favicons)"
+  ok "static files uploaded (incl. favicons, deploy hash: ${DEPLOY_HASH})"
 
   step "Deploying blog static files..."
   ssh_cmd "sudo mkdir -p $REMOTE_WEB/blog && sudo chown ec2-user:ec2-user $REMOTE_WEB/blog"
   # Inject git hash into HTML so browsers bust the cache on each deploy
-  DEPLOY_HASH=$(git rev-parse --short HEAD)
   sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" blog-site/index.html > /tmp/blog-index.html
   sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" blog-site/post.html  > /tmp/blog-post.html
   scp_file /tmp/blog-index.html /tmp/blog-post.html blog-site/blog.js "$SSH_HOST:/tmp/"
   ssh_cmd "sudo mv /tmp/blog-index.html $REMOTE_WEB/blog/index.html && sudo mv /tmp/blog-post.html $REMOTE_WEB/blog/post.html && sudo mv /tmp/blog.js $REMOTE_WEB/blog/blog.js"
-  ok "blog pages uploaded (deploy hash: ${DEPLOY_HASH})"
+  ok "blog pages uploaded"
 fi
 
 # ---------------------------------------------------------------------------
@@ -82,7 +88,9 @@ if [[ "$MODE" != "--site" ]]; then
   ok "Directory ready: $REMOTE_API"
 
   step "Uploading API source files..."
-  scp_file api/main.py api/email_template.py api/blog_routes.py \
+  # Inject deploy hash into SSR template so server-rendered pages get cache-busted asset URLs
+  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" api/blog_routes.py > /tmp/blog_routes.py
+  scp_file api/main.py api/email_template.py /tmp/blog_routes.py \
     api/config.py api/dependencies.py api/schemas.py \
     api/Pipfile api/Pipfile.lock api/Dockerfile "$SSH_HOST:$REMOTE_API/"
   # Scripts dir (batch tools — sudo needed for /www/)
