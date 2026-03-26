@@ -120,6 +120,9 @@ EOF
   fi
 REMOTE
 
+  # Capture previous image ID so we can roll back if the health check fails
+  PREV_IMAGE=$(ssh_cmd "sudo docker inspect --format='{{.Image}}' $CONTAINER 2>/dev/null || true")
+
   step "Building Docker image..."
   ssh_cmd "cd $REMOTE_API && sudo docker build -t $CONTAINER . 2>&1 | tail -5"
   ok "Image built: $CONTAINER"
@@ -129,7 +132,6 @@ REMOTE
     sudo docker stop $CONTAINER 2>/dev/null && echo "    stopped old container" || true
     sudo docker rm   $CONTAINER 2>/dev/null || true
     # --network host: container shares the host network stack.
-    # MariaDB sees connections from 127.0.0.1 (not the bridge IP).
     # Uvicorn binds to 0.0.0.0:8000 on the host directly.
     sudo docker run -d \\
       --name            $CONTAINER \\
@@ -145,8 +147,28 @@ REMOTE
 
   step "Verifying container health..."
   ssh_cmd "sudo docker ps --filter name=$CONTAINER --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
-  ssh_cmd "curl -sf http://127.0.0.1:$HOST_PORT/api/health && echo '    ✓ /api/health OK'" \
-    || { echo "    !!! health check failed — aborting deploy"; echo "    check: sudo docker logs $CONTAINER"; exit 1; }
+  if ! ssh_cmd "curl -sf http://127.0.0.1:$HOST_PORT/api/health"; then
+    echo "    !!! health check failed"
+    if [ -n "$PREV_IMAGE" ]; then
+      echo "    rolling back to previous image: $PREV_IMAGE"
+      ssh_cmd bash << ROLLBACK
+        sudo docker stop $CONTAINER 2>/dev/null || true
+        sudo docker rm   $CONTAINER 2>/dev/null || true
+        sudo docker run -d \\
+          --name            $CONTAINER \\
+          --restart         unless-stopped \\
+          --network         host \\
+          --env-file        $REMOTE_API/.env \\
+          $PREV_IMAGE
+ROLLBACK
+      echo "    rolled back — check: sudo docker logs $CONTAINER"
+    else
+      echo "    no previous image to roll back to"
+      echo "    check: sudo docker logs $CONTAINER"
+    fi
+    exit 1
+  fi
+  ok "/api/health OK"
 
 fi
 
