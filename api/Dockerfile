@@ -6,10 +6,11 @@ WORKDIR /app
 RUN pip install --no-cache-dir pipenv
 
 # Install dependencies from Pipfile.lock for reproducible builds.
+# pipenv sync installs exactly what's in the lockfile without checking that
+# the lock was generated on the same Python patch version as the image.
 # (--system: install into system Python, no venv needed in Docker)
-# (--deploy: enforce lockfile, fail if Pipfile.lock is out of sync)
 COPY Pipfile Pipfile.lock ./
-RUN pipenv install --system --deploy
+RUN pipenv sync --system
 
 COPY main.py email_template.py blog_routes.py config.py dependencies.py schemas.py ./
 
