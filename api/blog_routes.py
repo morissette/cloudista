@@ -22,6 +22,31 @@ from schemas import CategoryOut, MessageOut, PostDetail, PostList, PostRevisionO
 
 log = logging.getLogger(__name__)
 
+# SQLSTATE codes that indicate a transient connection problem rather than a
+# logic/schema bug.  These get a 503 so load-balancers/clients can retry.
+_TRANSIENT_SQLSTATES = frozenset({
+    "08003",  # connection_does_not_exist
+    "08006",  # connection_failure
+    "57P03",  # cannot_connect_now
+    "53300",  # too_many_connections
+})
+
+
+def _db_error(exc: asyncpg.PostgresError, context: str) -> HTTPException:
+    """Log a DB error and return the appropriate HTTPException (503 vs 500).
+
+    asyncpg stores sqlstate as bytes (e.g. b'53300') on real exceptions;
+    normalise to str before checking.
+    """
+    sqlstate = getattr(exc, "sqlstate", None)
+    if isinstance(sqlstate, (bytes, bytearray)):
+        sqlstate = sqlstate.decode("ascii")
+    if sqlstate in _TRANSIENT_SQLSTATES:
+        log.error("%s transient DB error: %s", context, exc)
+        return HTTPException(status_code=503, detail="Service temporarily unavailable.")
+    log.error("%s DB error: %s", context, exc)
+    return HTTPException(status_code=500, detail="Internal server error.")
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -85,8 +110,7 @@ async def search_posts(
             offset,
         )
     except asyncpg.PostgresError as exc:
-        log.error("search_posts error: %s", exc)
-        raise HTTPException(status_code=500, detail="Search failed.")
+        raise _db_error(exc, "search_posts")
 
     return PostList(
         posts=[PostSummary(**dict(row)) for row in rows],
@@ -153,8 +177,7 @@ async def list_posts(
             offset,
         )
     except asyncpg.PostgresError as exc:
-        log.error("list_posts error: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to fetch posts.")
+        raise _db_error(exc, "list_posts")
 
     return PostList(
         posts=[PostSummary(**dict(row)) for row in rows],
@@ -185,8 +208,7 @@ async def get_post(slug: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
     except HTTPException:
         raise
     except asyncpg.PostgresError as exc:
-        log.error("get_post(%s) error: %s", slug, exc)
-        raise HTTPException(status_code=500, detail="Failed to fetch post.")
+        raise _db_error(exc, f"get_post({slug})")
 
     return PostDetail(**dict(row), tags=tags, categories=categories)
 
@@ -241,8 +263,7 @@ async def related_posts(
     except HTTPException:
         raise
     except asyncpg.PostgresError as exc:
-        log.error("related_posts(%s) error: %s", slug, exc)
-        raise HTTPException(status_code=500, detail="Failed to fetch related posts.")
+        raise _db_error(exc, f"related_posts({slug})")
 
     return [PostSummary(**dict(r)) for r in rows]
 
@@ -262,8 +283,7 @@ async def list_revisions(slug: str, conn: asyncpg.Connection = Depends(get_pg_co
     except HTTPException:
         raise
     except asyncpg.PostgresError as exc:
-        log.error("list_revisions(%s) error: %s", slug, exc)
-        raise HTTPException(status_code=500, detail="Failed to fetch revisions.")
+        raise _db_error(exc, f"list_revisions({slug})")
     return [PostRevisionOut(**dict(r)) for r in rows]
 
 
@@ -305,8 +325,7 @@ async def restore_revision(
     except HTTPException:
         raise
     except asyncpg.PostgresError as exc:
-        log.error("restore_revision(%s, %d) error: %s", slug, revision_id, exc)
-        raise HTTPException(status_code=500, detail="Failed to restore revision.")
+        raise _db_error(exc, f"restore_revision({slug}, {revision_id})")
     return MessageOut(message="Revision restored.")
 
 
@@ -326,8 +345,7 @@ async def list_tags(conn: asyncpg.Connection = Depends(get_pg_conn)):
         )
         return [TagOut(**dict(r)) for r in rows]
     except asyncpg.PostgresError as exc:
-        log.error("list_tags error: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to fetch tags.")
+        raise _db_error(exc, "list_tags")
 
 
 @router.get("/categories", response_model=list[CategoryOut])
@@ -347,8 +365,7 @@ async def list_categories(response: Response, conn: asyncpg.Connection = Depends
         )
         return [CategoryOut(**dict(r)) for r in rows]
     except asyncpg.PostgresError as exc:
-        log.error("list_categories error: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to fetch categories.")
+        raise _db_error(exc, "list_categories")
 
 
 # ── Sitemap ────────────────────────────────────────────────────────────────────
@@ -380,8 +397,7 @@ async def sitemap(conn: asyncpg.Connection = Depends(get_pg_conn)):
             " ORDER BY published_at DESC"
         )
     except asyncpg.PostgresError as exc:
-        log.error("sitemap error: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to generate sitemap.")
+        raise _db_error(exc, "sitemap")
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -436,8 +452,7 @@ async def rss_feed(conn: asyncpg.Connection = Depends(get_pg_conn)):
             " ORDER BY published_at DESC LIMIT 20"
         )
     except asyncpg.PostgresError as exc:
-        log.error("rss_feed error: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to generate RSS feed.")
+        raise _db_error(exc, "rss_feed")
 
     now_rfc = _rfc2822(_dt.datetime.now(_dt.timezone.utc))
     lines = [
@@ -720,8 +735,7 @@ async def render_post_page(slug: str, conn: asyncpg.Connection = Depends(get_pg_
     except HTTPException:
         raise
     except asyncpg.PostgresError as exc:
-        log.error("render_post_page(%s) error: %s", slug, exc)
-        raise HTTPException(status_code=500)
+        raise _db_error(exc, f"render_post_page({slug})")
 
     return HTMLResponse(
         content=_render_post_html(dict(row), tags, categories),
