@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — referrer tracking in post view metrics
+
+### Added
+- `infra/schema.sql` — `referrer VARCHAR(100)` column added to `post_views` PK `(post_id, viewed_on, country, is_bot, referrer)`; partial index on non-empty referrers
+- `api/blog_routes.py` — `_referrer()`: extracts domain from `Referer` header, strips `www.`, filters internal referrers (cloudista.org), truncates at 100 chars; `""` = direct/unknown
+- `api/blog_routes.py` — `_record_view()` updated to include referrer in upsert
+- `api/blog_routes.py` — `get_post_stats()` adds `top_referrers` query (top-20 by human views)
+- `api/schemas.py` — `PostReferrerBreakdown` model; `top_referrers` field on `PostStatsDetail`
+- `api/tests/test_blog_routes.py` — 6 new `TestReferrerHelper` tests; updated `TestGetPostStats` assertions to include referrer data
+
+---
+
 ## [2026-03-26] — post view metrics with bot detection and geolocation
 
 ### Added

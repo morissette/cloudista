@@ -15,6 +15,7 @@ import json as _json
 import logging
 import re as _re
 from email.utils import format_datetime as _fmt_dt
+from urllib.parse import urlparse as _urlparse
 
 import asyncpg
 from config import settings
@@ -28,6 +29,7 @@ from schemas import (
     PostCountryBreakdown,
     PostDetail,
     PostList,
+    PostReferrerBreakdown,
     PostRevisionOut,
     PostStatsDetail,
     PostStatsSummary,
@@ -68,21 +70,44 @@ def _country(request: Request) -> str:
     return cf if len(cf) == 2 and cf.isalpha() else "XX"
 
 
+def _referrer(request: Request) -> str:
+    """Extract referring domain from the Referer header.
+
+    Returns the bare domain (e.g. "google.com") or "" for direct / no referrer.
+    Strips www. prefix, query strings, and paths for clean aggregation.
+    Internal referrers (cloudista.org) are treated as direct.
+    """
+    raw = request.headers.get("Referer", "").strip()
+    if not raw:
+        return ""
+    try:
+        host = _urlparse(raw).netloc.lower()
+        if host.startswith("www."):
+            host = host[4:]
+        # Treat internal referrers as direct
+        if not host or host in ("cloudista.org",):
+            return ""
+        return host[:100]
+    except Exception:
+        return ""
+
+
 async def _record_view(
     conn: asyncpg.Connection, post_id: int, slug: str, request: Request
 ) -> None:
     """Upsert a view into post_views and increment the Prometheus counter."""
     country = _country(request)
     bot = _is_bot(request)
+    ref = _referrer(request)
     try:
         await conn.execute(
             """
-            INSERT INTO post_views (post_id, viewed_on, country, is_bot, view_count)
-            VALUES ($1, CURRENT_DATE, $2, $3, 1)
-            ON CONFLICT (post_id, viewed_on, country, is_bot)
+            INSERT INTO post_views (post_id, viewed_on, country, is_bot, referrer, view_count)
+            VALUES ($1, CURRENT_DATE, $2, $3, $4, 1)
+            ON CONFLICT (post_id, viewed_on, country, is_bot, referrer)
             DO UPDATE SET view_count = post_views.view_count + 1
             """,
-            post_id, country, bot,
+            post_id, country, bot, ref,
         )
     except asyncpg.PostgresError as exc:
         # Non-fatal — log and continue; don't fail the post request over analytics
@@ -398,6 +423,16 @@ async def get_post_stats(
             post_id,
         )
 
+        referrer_rows = await conn.fetch(
+            """
+            SELECT referrer, SUM(view_count) AS views
+            FROM post_views
+            WHERE post_id = $1 AND NOT is_bot
+            GROUP BY referrer ORDER BY views DESC LIMIT 20
+            """,
+            post_id,
+        )
+
     except HTTPException:
         raise
     except asyncpg.PostgresError as exc:
@@ -412,6 +447,7 @@ async def get_post_stats(
         bot_views_all=totals["bot_views_all"],
         daily=[PostViewDay(date=r["viewed_on"], views=r["views"], bot_views=r["bot_views"]) for r in daily_rows],
         top_countries=[PostCountryBreakdown(country=r["country"], views=r["views"]) for r in country_rows],
+        top_referrers=[PostReferrerBreakdown(referrer=r["referrer"], views=r["views"]) for r in referrer_rows],
     )
 
 
