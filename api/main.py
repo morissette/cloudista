@@ -15,6 +15,7 @@ import json
 import logging
 import re
 import secrets
+import time
 import urllib.parse
 import urllib.request
 import uuid
@@ -65,8 +66,10 @@ log = logging.getLogger(__name__)
 _TOKEN_TTL = timedelta(hours=72)
 _PREFS_TOKEN_TTL = timedelta(days=365)
 
-# Simple in-process SNS cert cache (keyed by URL; certs are long-lived)
-_SNS_CERT_CACHE: dict[str, bytes] = {}
+# SNS cert cache: maps URL → (cert_pem, fetch_timestamp). Certs expire after 24h
+# so stale certs don't persist if AWS rotates signing keys.
+_SNS_CERT_CACHE: dict[str, tuple[bytes, float]] = {}
+_SNS_CERT_TTL = 86_400  # 24 hours in seconds
 
 
 def _mask_email(email: str) -> str:
@@ -244,12 +247,14 @@ def _verify_sns_signature(body: dict) -> bool:
     if not canonical:
         return False
 
-    cert_pem = _SNS_CERT_CACHE.get(cert_url)
-    if cert_pem is None:
+    cached = _SNS_CERT_CACHE.get(cert_url)
+    if cached is not None and time.time() - cached[1] < _SNS_CERT_TTL:
+        cert_pem = cached[0]
+    else:
         try:
             with urllib.request.urlopen(cert_url, timeout=5) as resp:
                 cert_pem = resp.read()
-            _SNS_CERT_CACHE[cert_url] = cert_pem
+            _SNS_CERT_CACHE[cert_url] = (cert_pem, time.time())
         except Exception as exc:
             log.warning("SNS cert fetch failed: %s", exc)
             return False
