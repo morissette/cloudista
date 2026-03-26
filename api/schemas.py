@@ -92,6 +92,11 @@ class PostCountryBreakdown(BaseModel):
     views: int
 
 
+class PostReferrerBreakdown(BaseModel):
+    referrer: str  # domain only, e.g. "google.com"; "" = direct / no referrer
+    views: int
+
+
 class PostStatsSummary(BaseModel):
     slug: str
     title: str
@@ -110,3 +115,4 @@ class PostStatsDetail(BaseModel):
     bot_views_all: int
     daily: list[PostViewDay]
     top_countries: list[PostCountryBreakdown]
+    top_referrers: list[PostReferrerBreakdown]

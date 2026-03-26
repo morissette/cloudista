@@ -37,17 +37,19 @@ CREATE OR REPLACE VIEW active_subscribers AS
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS post_views (
-    post_id    INTEGER  NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-    viewed_on  DATE     NOT NULL DEFAULT CURRENT_DATE,
-    country    CHAR(2)  NOT NULL DEFAULT 'XX',  -- ISO 3166-1 alpha-2; XX = unknown/Tor
-    is_bot     BOOLEAN  NOT NULL DEFAULT false,
-    view_count INTEGER  NOT NULL DEFAULT 1,
-    PRIMARY KEY (post_id, viewed_on, country, is_bot)
+    post_id    INTEGER       NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    viewed_on  DATE          NOT NULL DEFAULT CURRENT_DATE,
+    country    CHAR(2)       NOT NULL DEFAULT 'XX',  -- ISO 3166-1 alpha-2; XX = unknown/Tor
+    is_bot     BOOLEAN       NOT NULL DEFAULT false,
+    referrer   VARCHAR(100)  NOT NULL DEFAULT '',    -- domain only, e.g. google.com; '' = direct
+    view_count INTEGER       NOT NULL DEFAULT 1,
+    PRIMARY KEY (post_id, viewed_on, country, is_bot, referrer)
 );
 
-CREATE INDEX IF NOT EXISTS idx_post_views_date    ON post_views (viewed_on);
-CREATE INDEX IF NOT EXISTS idx_post_views_post_id ON post_views (post_id);
-CREATE INDEX IF NOT EXISTS idx_post_views_country ON post_views (country);
+CREATE INDEX IF NOT EXISTS idx_post_views_date     ON post_views (viewed_on);
+CREATE INDEX IF NOT EXISTS idx_post_views_post_id  ON post_views (post_id);
+CREATE INDEX IF NOT EXISTS idx_post_views_country  ON post_views (country);
+CREATE INDEX IF NOT EXISTS idx_post_views_referrer ON post_views (referrer) WHERE referrer != '';
 -- Partial index for human-only queries (most common analytics path)
 CREATE INDEX IF NOT EXISTS idx_post_views_humans
     ON post_views (post_id, viewed_on) WHERE is_bot = false;

@@ -487,13 +487,70 @@ class TestCountryHelper:
         assert _country(req) == "XX"
 
 
+class TestReferrerHelper:
+    def test_extracts_domain(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _referrer
+        req = MagicMock()
+        req.headers.get = lambda k, d="": {
+            "Referer": "https://www.google.com/search?q=cloudista"
+        }.get(k, d)
+        assert _referrer(req) == "google.com"
+
+    def test_strips_www_prefix(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _referrer
+        req = MagicMock()
+        req.headers.get = lambda k, d="": {"Referer": "https://www.twitter.com/"}.get(k, d)
+        assert _referrer(req) == "twitter.com"
+
+    def test_no_referer_returns_empty(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _referrer
+        req = MagicMock()
+        req.headers.get = lambda k, d="": d
+        assert _referrer(req) == ""
+
+    def test_internal_referrer_returns_empty(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _referrer
+        req = MagicMock()
+        req.headers.get = lambda k, d="": {
+            "Referer": "https://cloudista.org/blog/some-post"
+        }.get(k, d)
+        assert _referrer(req) == ""
+
+    def test_invalid_url_returns_empty(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _referrer
+        req = MagicMock()
+        req.headers.get = lambda k, d="": {"Referer": "not-a-url"}.get(k, d)
+        assert _referrer(req) == ""
+
+    def test_truncates_long_domain(self):
+        from unittest.mock import MagicMock
+
+        from blog_routes import _referrer
+        req = MagicMock()
+        long_domain = "a" * 200 + ".com"
+        req.headers.get = lambda k, d="": {"Referer": f"https://{long_domain}/"}.get(k, d)
+        result = _referrer(req)
+        assert len(result) <= 100
+
+
 # ---------------------------------------------------------------------------
 # /api/posts/{slug}/stats — per-post view stats (admin only)
 # ---------------------------------------------------------------------------
 
 TOTALS_ROW = {"views_7d": 50, "views_30d": 150, "views_all": 500, "bot_views_all": 20}
-DAILY_ROW  = {"viewed_on": __import__("datetime").date(2026, 3, 25), "views": 10, "bot_views": 1}
+DAILY_ROW = {"viewed_on": __import__("datetime").date(2026, 3, 25), "views": 10, "bot_views": 1}
 COUNTRY_ROW = {"country": "US", "views": 300}
+REFERRER_ROW = {"referrer": "google.com", "views": 200}
 POST_ID_ROW = {"id": 1, "title": "Test Post"}
 
 
@@ -506,6 +563,7 @@ class TestGetPostStats:
         mock_conn.fetch = AsyncMock(side_effect=[
             [_record(DAILY_ROW)],
             [_record(COUNTRY_ROW)],
+            [_record(REFERRER_ROW)],
         ])
 
     def test_returns_stats(self, blog_client):
@@ -522,6 +580,9 @@ class TestGetPostStats:
         assert data["daily"][0]["views"] == 10
         assert len(data["top_countries"]) == 1
         assert data["top_countries"][0]["country"] == "US"
+        assert len(data["top_referrers"]) == 1
+        assert data["top_referrers"][0]["referrer"] == "google.com"
+        assert data["top_referrers"][0]["views"] == 200
 
     def test_missing_post_returns_404(self, blog_client):
         c, conn = blog_client
