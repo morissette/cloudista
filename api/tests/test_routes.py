@@ -499,6 +499,30 @@ class TestPreferences:
 
 
 # ---------------------------------------------------------------------------
+# _mask_email helper
+# ---------------------------------------------------------------------------
+
+class TestMaskEmail:
+    def test_normal_email(self):
+        from main import _mask_email
+        assert _mask_email("john@example.com") == "jo***@example.com"
+
+    def test_short_local_part(self):
+        from main import _mask_email
+        assert _mask_email("a@example.com") == "a***@example.com"
+
+    def test_invalid_email_returns_stars(self):
+        from main import _mask_email
+        assert _mask_email("notanemail") == "***"
+
+    def test_preserves_domain(self):
+        from main import _mask_email
+        result = _mask_email("user@sub.domain.org")
+        assert result.endswith("@sub.domain.org")
+        assert "***" in result
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

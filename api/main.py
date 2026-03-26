@@ -68,6 +68,14 @@ _PREFS_TOKEN_TTL = timedelta(days=365)
 # Simple in-process SNS cert cache (keyed by URL; certs are long-lived)
 _SNS_CERT_CACHE: dict[str, bytes] = {}
 
+
+def _mask_email(email: str) -> str:
+    """Return a partially-masked email for safe logging (e.g. jo***@example.com)."""
+    at = email.find("@")
+    if at <= 0:
+        return "***"
+    return email[:min(2, at)] + "***" + email[at:]
+
 # SNS field order for canonical string construction (per AWS spec)
 _SNS_NOTIFICATION_FIELDS = ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"]
 _SNS_SUBSCRIPTION_FIELDS = ["Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type"]
@@ -189,7 +197,7 @@ def _send_verification(email: str, token: str, prefs_token: str = "") -> None:
             },
         },
     )
-    log.info("Verification email sent → %s", email)
+    log.info("Verification email sent → %s", _mask_email(email))
 
 
 async def _try_send_verification(email: str, token: str, prefs_token: str = "") -> None:
@@ -197,7 +205,7 @@ async def _try_send_verification(email: str, token: str, prefs_token: str = "") 
     try:
         await asyncio.to_thread(_send_verification, email, token, prefs_token)
     except (BotoCoreError, ClientError) as exc:
-        log.error("SES send failed for %s: %s", email, exc)
+        log.error("SES send failed for %s: %s", _mask_email(email), exc)
 
 
 def _sns_canonical_string(body: dict) -> str:
@@ -470,7 +478,7 @@ async def subscribe(
         constraint = exc.constraint_name or ""
         if "token" in constraint:
             # Token collision (astronomically rare) — treat as transient error
-            log.error("Token uniqueness violation for %s — retry", body.email)
+            log.error("Token uniqueness violation for %s — retry", _mask_email(body.email))
             raise HTTPException(status_code=500, detail="Subscription failed, please retry.")
         response.status_code = 200
         return MessageOut(message="Already subscribed.")

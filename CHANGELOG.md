@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — mask email addresses in log output
+
+### Changed
+- `api/main.py` — added `_mask_email()` helper; applied to all three log sites that previously logged full email addresses (`log.info` in `_send_verification`, `log.error` in `_try_send_verification`, `log.error` for token uniqueness violation). Logs now show e.g. `jo***@example.com`
+- `api/tests/test_routes.py` — added `TestMaskEmail` class with 4 tests
+
+---
+
 ## [2026-03-26] — HTML-escape text content and URL attributes in email templates
 
 ### Changed
