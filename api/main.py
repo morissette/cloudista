@@ -568,7 +568,7 @@ async def confirm(token: str, conn: asyncpg.Connection = Depends(get_pg_conn)):
         # If another request raced and changed status or the token just expired, treat as already/expired
         if updated == "UPDATE 0":
             return RedirectResponse(url=f"{settings.site_url}/?confirmed=already", status_code=302)
-        return RedirectResponse(url=f"{settings.site_url}/?confirmed=true", status_code=302)
+        return RedirectResponse(url=f"{settings.site_url}/?confirmed=1", status_code=302)
     except Exception as exc:
         log.error("confirm error: %s", exc)
         return RedirectResponse(url=f"{settings.site_url}/?confirmed=error", status_code=302)

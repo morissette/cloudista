@@ -216,7 +216,7 @@ class TestConfirm:
 
         resp = c.get("/api/confirm/validtoken", follow_redirects=False)
         assert resp.status_code == 302
-        assert "confirmed=true" in resp.headers["location"]
+        assert "confirmed=1" in resp.headers["location"]
 
     def test_unknown_token_redirects_invalid(self, client):
         c, conn = client
