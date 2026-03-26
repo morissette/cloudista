@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — SNS signature verified once at webhook entry point
+
+### Changed
+- `api/main.py` — `ses_webhook()` now verifies SNS signature at the top before branching on message type; removes the redundant second verification that was inside the `Notification` branch
+- `api/tests/test_routes.py` — updated `test_unknown_type_returns_ignored` to patch `_verify_sns_signature` (now all paths require a valid signature)
+
+---
+
 ## [2026-03-26] — simplify token generation, fix health endpoint, reproducible Docker builds
 
 ### Changed
