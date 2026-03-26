@@ -6,6 +6,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — Buy Me a Coffee integration
+
+### Added
+- All site footers — "Buy me a coffee" link to `https://www.buymeacoffee.com/cloudista` added to `.site-footer__links` nav in `site/index.html`, `site/work-with-me.html`, `blog-site/index.html`, `blog-site/post.html`, `blog-site/archive.html`, and the SSR post template in `api/blog_routes.py`
+- End of each blog post — `.post-support` div with ☕ Buy me a coffee button rendered between `</article>` and the related-posts aside, in both `blog-site/post.html` (JS-rendered) and the SSR `_POST_HTML_TEMPLATE` (crawler-rendered)
+- `site/style.css` — `.post-support` and `.post-support__link` styles (yellow BMC button, hover fade)
+
+---
+
+## [2026-03-26] — Work with me consulting page + contact form
+
+### Added
+- `site/work-with-me.html` — consulting landing page: hero, "Is this your situation?" problem list, engagement cards (Platform audit / Sprint embed / Advisory retainer), recent-work samples, about strip, and contact form
+- `site/style.css` — full `.wwm-*` CSS section for the work-with-me page layout, engagement cards, sample links, form grid, and success/error states
+- `site/main.js` — contact form handler: bot heuristics + lazy Turnstile CAPTCHA (same pattern as subscribe form), `/api/contact` POST, success/error display
+- `api/schemas.py` — `ContactIn` Pydantic model (name, email, company, engagement, situation, optional Turnstile token)
+- `api/main.py` — `POST /api/contact` route (rate-limited 5/min/IP, Turnstile-aware, sends SES email to `admin@cloudista.org` with Reply-To set to enquirer)
+- `api/email_template.py` — `build_contact_email()`: wraps enquiry in `_email_html_wrapper()` with a bordered metadata table and blue left-border situation block
+- `infra/nginx-cloudista.conf` — `/work-with-me` location block
+- `deploy.sh` — `work-with-me.html` added to static file deploy list
+
+---
+
+## [2026-03-26] — Archive page for unlisted posts + nav links
+
+### Added
+- `infra/schema.sql` — `'unlisted'` status added to `posts_status_check` constraint (posts visible via direct URL and site search, but excluded from listing, sitemap, and RSS)
+- `api/blog_routes.py` — unlisted posts accessible via slug, search, stats; `GET /api/blog/archive` returns all unlisted posts (oldest-first)
+- `blog-site/archive.html` — `/archive` page listing unlisted posts; `noindex` meta + `X-Robots-Tag: noindex nofollow` nginx header
+- `blog-site/blog.js` — archive listing section (calls `/api/archive`, renders post cards with pagination)
+- `infra/nginx-cloudista.conf` — `/archive` and `/archive/page/N` location blocks with noindex header; `/sitemap.xml` proxies to `/api/sitemap.xml`
+- Nav links — Archive and Work with me added to `site/index.html`, `blog-site/index.html`, `blog-site/post.html`, and the SSR `_POST_HTML_TEMPLATE` in `api/blog_routes.py`
+- `deploy.sh` — `archive.html` added to blog static file deploy list
+
+---
+
 ## [2026-03-26] — fix confirm banner missing on blog listing page
 
 ### Fixed

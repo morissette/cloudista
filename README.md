@@ -4,7 +4,7 @@
 [![Test](https://github.com/morissette/cloudista/actions/workflows/test.yml/badge.svg)](https://github.com/morissette/cloudista/actions/workflows/test.yml)
 [![Deploy](https://github.com/morissette/cloudista/actions/workflows/deploy.yml/badge.svg)](https://github.com/morissette/cloudista/actions/workflows/deploy.yml)
 
-Personal technical blog covering DevOps, platform engineering, Kubernetes, cloud infrastructure, and SRE. Live at [cloudista.org](https://cloudista.org).
+Personal technical blog and consulting site covering DevOps, platform engineering, Kubernetes, cloud infrastructure, and SRE. Live at [cloudista.org](https://cloudista.org).
 
 ---
 
@@ -13,7 +13,7 @@ Personal technical blog covering DevOps, platform engineering, Kubernetes, cloud
 | Layer | Technology |
 |---|---|
 | Frontend | Static HTML/CSS/JS — no framework |
-| API | FastAPI (Python 3.11), served via Docker on EC2 |
+| API | FastAPI (Python 3.12), served via Docker on EC2 |
 | Database | PostgreSQL 16 (blog posts, tags, authors, subscribers) |
 | Web server | nginx (reverse proxy + static files) |
 | CI/CD | GitHub Actions → SSH deploy to EC2 |
@@ -31,8 +31,8 @@ cloudista/
 │   ├── dependencies.py PostgreSQL connection pool + Depends()
 │   └── schemas.py    All Pydantic request/response models
 ├── blog/             Post source files (*.txt) + import/image tools
-├── blog-site/        Blog listing + post pages (HTML/JS)
-├── site/             Landing site (index.html, style.css, etc.)
+├── blog-site/        Blog listing, post, and archive pages (HTML/JS)
+├── site/             Landing site (index.html, work-with-me.html, style.css, etc.)
 │   └── assets/       Favicons, og-image, webmanifest
 ├── infra/            nginx config, PostgreSQL schema
 ├── images/           Post hero images
@@ -191,6 +191,9 @@ Missing required variables raise a `ValidationError` at startup with a clear mes
 - [x] Sitemap at `/sitemap.xml`
 - [x] RSS feed at `/feed.xml`
 - [x] `robots.txt`
+- [x] **Unlisted post status** — posts hidden from listing/sitemap/RSS but accessible via direct URL and search; `GET /api/blog/archive` surfaces them at `/archive`
+- [x] **Work with me page** — consulting landing page at `/work-with-me` with contact form wired to SES (rate-limited, Turnstile CAPTCHA)
+- [x] **Buy me a coffee** — link in all page footers and ☕ button at end of every blog post (`buymeacoffee.com/cloudista`)
 
 ### Subscriber / email
 - [x] Subscribe form with Cloudflare Turnstile CAPTCHA
@@ -216,7 +219,7 @@ Missing required variables raise a `ValidationError` at startup with a clear mes
 - [x] `GET /api/posts/{slug}/stats` — daily breakdown (90 days), top-20 countries, 7d/30d/all human vs bot aggregates (admin key required)
 - [x] `GET /api/stats` — top posts by views with period filter (`7d`/`30d`/`all`), `include_bots` flag (admin key required)
 - [ ] **Analytics dashboard** — admin UI showing top posts, country heatmap, bot/human split; currently API-only
-- [ ] **Referrer tracking** — add `referrer` column to `post_views`; surface top referrers per post
+- [x] **Referrer tracking** — `referrer` column on `post_views`; `top_referrers` in `GET /api/posts/{slug}/stats`
 
 ---
 
@@ -240,7 +243,7 @@ Goal: reach first revenue by month 3. Strategy: grow organic search traffic → 
 
 ### Month 3 — First revenue
 - [ ] **First sponsored post or newsletter slot** — flat-fee placement ($150–$500 for a technical blog at this stage)
-- [ ] **"Buy me a coffee" / GitHub Sponsors** — low-friction one-time support for readers who find value
+- [x] **"Buy me a coffee"** — integrated at `buymeacoffee.com/cloudista`; link in all footers and ☕ button at end of every post
 - [ ] **Premium content experiment** — one gated deep-dive (e.g. "Production Kubernetes on a Budget: Full Walkthrough") behind an email gate or $5–10 paywall via Gumroad/Lemon Squeezy
 - [ ] **Referral program** — "Share with a colleague" CTA in digest emails with a tracked link
 

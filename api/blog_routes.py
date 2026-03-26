@@ -847,6 +847,10 @@ _POST_HTML_TEMPLATE = """\
         </header>
         {hero_html}
         <article class="post-body" id="post-body">{content_html}</article>
+        <div class="post-support">
+          <a href="https://www.buymeacoffee.com/cloudista" class="post-support__link"
+             rel="noopener noreferrer" target="_blank">&#x2615; Buy me a coffee</a>
+        </div>
         <aside class="related-posts" id="related-posts" hidden></aside>
       </div>
 
@@ -860,6 +864,8 @@ _POST_HTML_TEMPLATE = """\
         <a href="mailto:admin@cloudista.org">Contact</a>
         <a href="/privacy.html" rel="noopener noreferrer">Privacy</a>
         <a href="/terms.html"   rel="noopener noreferrer">Terms</a>
+        <a href="https://www.buymeacoffee.com/cloudista"
+           rel="noopener noreferrer" target="_blank">Buy me a coffee</a>
       </nav>
     </div>
   </footer>
