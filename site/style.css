@@ -667,11 +667,13 @@ a { color: inherit; text-decoration: none; }
 .post-body ul, .post-body ol { padding-left: 1.5em; margin-bottom: 1.35em; }
 .post-body li { margin-bottom: .35em; }
 .post-body blockquote {
-  border-left: 3px solid var(--accent-ring); background: var(--accent-light);
-  padding: .9rem 1.1rem; border-radius: 0 var(--r-sm) var(--r-sm) 0;
-  margin: 1.5em 0; font-size: .95em; color: var(--text-2);
+  border-left: 4px solid var(--accent); background: var(--accent-light);
+  padding: 1rem 1.25rem; border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  margin: 1.75em 0; font-size: .975em; color: var(--text-1);
+  font-style: italic;
 }
 .post-body blockquote p { margin: 0; }
+.post-body blockquote p + p { margin-top: .6em; }
 .post-body code {
   font-family: var(--mono); font-size: .875em;
   background: var(--bg-2); color: var(--accent-dark);
@@ -701,6 +703,10 @@ a { color: inherit; text-decoration: none; }
 .post-body th { background: var(--bg-2); font-weight: 700; color: var(--text-1); }
 .post-body tr:nth-child(even) td { background: var(--bg-2); }
 .post-body img { max-width: 100%; height: auto; border-radius: var(--r-md); border: 1px solid var(--border); margin: 1.5em 0; }
+.post-body img[style*="float"] { border: none; }
+@media (max-width: 600px) {
+  .post-body img[style*="float"] { float: none !important; display: block; width: 100% !important; margin: 1.5em 0 !important; }
+}
 
 /* ── Pygments "friendly" syntax theme ── */
 .highlight .c  { color: #60a0b0; font-style: italic }
