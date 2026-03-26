@@ -22,6 +22,14 @@ from schemas import CategoryOut, MessageOut, PostDetail, PostList, PostRevisionO
 
 log = logging.getLogger(__name__)
 
+
+def _require_admin_key(request: Request) -> None:
+    """FastAPI dependency — raises 403 if X-Admin-Key is missing or wrong."""
+    key = settings.admin_key
+    if not key or request.headers.get("X-Admin-Key") != key:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+
 # SQLSTATE codes that indicate a transient connection problem rather than a
 # logic/schema bug.  These get a 503 so load-balancers/clients can retry.
 _TRANSIENT_SQLSTATES = frozenset({
@@ -291,14 +299,10 @@ async def list_revisions(slug: str, conn: asyncpg.Connection = Depends(get_pg_co
 async def restore_revision(
     slug: str,
     revision_id: int,
-    request: Request,
+    _: None = Depends(_require_admin_key),
     conn: asyncpg.Connection = Depends(get_pg_conn),
 ):
     """Restore a previous revision. Snapshots the current version before overwriting."""
-    if not settings.admin_key:
-        raise HTTPException(status_code=503, detail="Revert not configured.")
-    if request.headers.get("X-Admin-Key") != settings.admin_key:
-        raise HTTPException(status_code=403, detail="Forbidden.")
     try:
         post = await conn.fetchrow("SELECT id FROM posts WHERE slug = $1", slug)
         if not post:

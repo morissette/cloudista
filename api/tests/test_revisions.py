@@ -107,7 +107,7 @@ class TestRestoreRevision:
             )
         assert resp.status_code == 403
 
-    def test_admin_key_not_configured_returns_503(self, client):
+    def test_admin_key_not_configured_returns_403(self, client):
         c, conn = client
         with patch("blog_routes.settings") as mock_settings:
             mock_settings.admin_key = ""
@@ -115,7 +115,7 @@ class TestRestoreRevision:
                 "/api/posts/my-post/revisions/1/restore",
                 headers={"X-Admin-Key": "anything"},
             )
-        assert resp.status_code == 503
+        assert resp.status_code == 403
 
     def test_unknown_slug_returns_404(self, client):
         c, conn = client
