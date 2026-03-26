@@ -809,6 +809,7 @@ _POST_HTML_TEMPLATE = """\
         Cloudista
       </a>
       <nav class="site-nav" aria-label="Site navigation">
+        <a href="/archive">Archive</a>
         <a href="/feed.xml" class="nav-rss" aria-label="RSS feed">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <circle cx="6.18" cy="17.82" r="2.18"/>
