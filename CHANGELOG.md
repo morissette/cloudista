@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — expired prefs link returns error page instead of silent token rotation
+
+### Changed
+- `api/main.py` — `preferences_page()` no longer auto-rotates an expired token; returns an error page with message "Your preferences link has expired. Check your most recent email for a new one." instead of silently creating a new token and redirecting
+- `api/tests/test_routes.py` — added `test_get_expired_token_returns_error_page` to cover the expired token path
+
+---
+
 ## [2026-03-26] — SNS signature verified once at webhook entry point
 
 ### Changed

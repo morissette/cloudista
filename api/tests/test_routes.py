@@ -476,6 +476,17 @@ class TestPreferences:
         )
         assert resp.status_code == 422
 
+    def test_get_expired_token_returns_error_page(self, client):
+        from datetime import datetime, timedelta, timezone
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=_prefs_row(
+            prefs_token_expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+        ))
+
+        resp = c.get("/api/preferences/expiredtoken")
+        assert resp.status_code == 200
+        assert "expired" in resp.text.lower()
+
     def test_post_not_found_returns_404(self, client):
         c, conn = client
         conn.execute = AsyncMock(return_value="UPDATE 0")
