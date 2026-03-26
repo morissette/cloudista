@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-25] — request ID propagated into log records
+
+### Changed
+- `api/main.py` — added `_request_id_var` context variable and `_RequestIdFilter`; log format updated to `%(request_id)s`; middleware sets the context var at request start and resets it on completion so every log line includes the request ID
+
+---
+
 ## [2026-03-25] — cache bust main.js and style.css on all pages
 
 ### Changed

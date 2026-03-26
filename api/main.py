@@ -10,6 +10,7 @@ GET  /api/health                 – liveness probe (validates DB connectivity)
 
 import asyncio
 import base64
+import contextvars
 import hashlib
 import json
 import logging
@@ -40,12 +41,22 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 # ---------------------------------------------------------------------------
-# Logging
+# Logging — inject request_id into every log record via a context var + filter
 # ---------------------------------------------------------------------------
+_request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
+
+
+class _RequestIdFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = _request_id_var.get()
+        return True
+
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
+    format="%(asctime)s %(levelname)s [%(request_id)s] %(message)s",
 )
+logging.getLogger().addFilter(_RequestIdFilter())
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -116,7 +127,12 @@ async def request_id_middleware(request: Request, call_next):
     # Strip control characters to prevent CRLF header injection
     req_id = re.sub(r"[^\x20-\x7E]", "", raw)[:64] or str(uuid.uuid4())
     request.state.request_id = req_id
-    response = await call_next(request)
+    # Propagate into log records for the duration of this request
+    token = _request_id_var.set(req_id)
+    try:
+        response = await call_next(request)
+    finally:
+        _request_id_var.reset(token)
     response.headers["X-Request-ID"] = req_id
     return response
 
