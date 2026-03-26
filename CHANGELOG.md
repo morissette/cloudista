@@ -15,6 +15,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — replace 503 with 403 for unconfigured admin key
+
+### Changed
+- `api/blog_routes.py` — extracted `_require_admin_key()` FastAPI dependency; missing or wrong `X-Admin-Key` now returns 403 (was: 503 when unconfigured, 403 when wrong)
+- `api/tests/test_revisions.py` — updated `test_admin_key_not_configured_returns_503` → `_returns_403`
+
+---
+
 ## [2026-03-26] — upgrade to Python 3.12
 
 ### Changed
