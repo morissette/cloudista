@@ -466,3 +466,100 @@ if (postContentEl) {
     loadPost();
   }
 }
+
+// ════════════════════════════════════════
+// ARCHIVE LISTING
+// ════════════════════════════════════════
+
+const archiveEl = document.getElementById('archive-grid');
+
+if (archiveEl) {
+  let currentPage     = 1;
+  let fetchController = null;
+
+  const prevBtn    = document.getElementById('prev-btn');
+  const nextBtn    = document.getElementById('next-btn');
+  const pageInfo   = document.getElementById('page-info');
+  const pagination = document.getElementById('pagination');
+
+  function skeletonCard() {
+    return `
+      <div class="post-card post-card--skeleton" aria-hidden="true">
+        <div class="skel" style="width:60px;height:10px"></div>
+        <div class="skel" style="width:85%;height:18px;margin-top:4px"></div>
+        <div class="skel" style="width:70%;height:16px"></div>
+        <div class="skel" style="width:100%;height:12px;margin-top:6px"></div>
+        <div class="skel" style="width:95%;height:12px"></div>
+        <div class="skel" style="width:80%;height:12px"></div>
+      </div>`;
+  }
+
+  function postCard(post) {
+    const date    = formatDate(post.published_at);
+    const excerpt = post.excerpt || '';
+    const href    = `/blog/${post.slug}`;
+    const img     = post.image_url
+      ? `<div class="post-card__img-wrap"><img class="post-card__img" src="${escHtml(post.image_url)}" alt="" loading="lazy" decoding="async" width="400" height="160"></div>`
+      : '';
+    return `
+      <a class="post-card${post.image_url ? ' post-card--has-img' : ''}" href="${href}">
+        ${img}
+        <span class="post-card__date">${escHtml(date)}</span>
+        <span class="post-card__title">${escHtml(post.title)}</span>
+        ${excerpt ? `<span class="post-card__excerpt">${escHtml(excerpt)}</span>` : ''}
+        <span class="post-card__cta">Read more →</span>
+      </a>`;
+  }
+
+  function getPage() {
+    const m = location.pathname.match(/\/archive\/page\/(\d+)\/?$/);
+    return m ? parseInt(m[1], 10) : 1;
+  }
+
+  function pushPage(page) {
+    const path = page > 1 ? `/archive/page/${page}` : '/archive';
+    history.replaceState(null, '', path);
+  }
+
+  async function loadArchive(page) {
+    if (fetchController) fetchController.abort();
+    fetchController = new AbortController();
+    const { signal } = fetchController;
+
+    archiveEl.innerHTML = Array(PER_PAGE).fill(0).map(skeletonCard).join('');
+
+    try {
+      const res  = await fetch(`${API}/archive?page=${page}&per_page=${PER_PAGE}`, { signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      archiveEl.innerHTML = '';
+      if (!data.posts.length) {
+        archiveEl.innerHTML = '<p class="blog-empty">No archived posts found.</p>';
+        pagination.hidden = true;
+        return;
+      }
+      data.posts.forEach(p => archiveEl.insertAdjacentHTML('beforeend', postCard(p)));
+
+      if (data.pages > 1) {
+        pagination.hidden = false;
+        pageInfo.textContent = `${data.page} of ${data.pages}`;
+        prevBtn.disabled = data.page <= 1;
+        nextBtn.disabled = data.page >= data.pages;
+      } else {
+        pagination.hidden = true;
+      }
+      currentPage = data.page;
+      pushPage(data.page);
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      archiveEl.innerHTML = '<p class="blog-empty">Failed to load archive. Please try again.</p>';
+      console.error('loadArchive error:', err);
+    }
+  }
+
+  prevBtn.addEventListener('click', () => { if (currentPage > 1) loadArchive(currentPage - 1); });
+  nextBtn.addEventListener('click', () => loadArchive(currentPage + 1));
+
+  loadArchive(getPage());
+}
