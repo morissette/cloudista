@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — distinguish DB errors from not-found in preferences endpoint
+
+### Changed
+- `api/main.py` — `preferences_page()` now catches `asyncpg.PostgresError` specifically and raises HTTP 503; previously any DB exception silently set `row = None` and returned a "Link not found" page, masking real infrastructure failures
+
+---
+
 ## [2026-03-26] — add Turnstile CAPTCHA coverage tests
 
 ### Changed
