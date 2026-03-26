@@ -304,7 +304,9 @@ class TestSesWebhook:
 
     def test_unknown_type_returns_ignored(self, client):
         c, _ = client
-        resp = c.post("/api/ses-webhook", json={"Type": "Unknown"})
+        # Signature is verified first; patch it so we can test the type-branch logic.
+        with patch("main._verify_sns_signature", return_value=True):
+            resp = c.post("/api/ses-webhook", json={"Type": "Unknown"})
         assert resp.status_code == 200
         assert resp.json()["status"] == "ignored"
 

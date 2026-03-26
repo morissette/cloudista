@@ -639,13 +639,15 @@ async def ses_webhook(request: Request, conn: asyncpg.Connection = Depends(get_p
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON.")
 
+    # Verify signature once before branching on message type.
+    if not _verify_sns_signature(body):
+        log.warning("SNS message failed signature check — rejected (type=%s)", body.get("Type"))
+        raise HTTPException(status_code=400, detail="Invalid SNS signature.")
+
     msg_type = body.get("Type", "")
 
-    # SNS first sends a SubscriptionConfirmation — auto-confirm only after verifying signature.
+    # SNS first sends a SubscriptionConfirmation — auto-confirm after signature is validated.
     if msg_type == "SubscriptionConfirmation":
-        if not _verify_sns_signature(body):
-            log.warning("SNS SubscriptionConfirmation failed signature check — rejected")
-            raise HTTPException(status_code=400, detail="Invalid SNS signature.")
         subscribe_url = body.get("SubscribeURL", "")
         parsed = urllib.parse.urlparse(subscribe_url)
         # Only follow confirmation URLs from sns.amazonaws.com (prevents SSRF)
@@ -663,11 +665,6 @@ async def ses_webhook(request: Request, conn: asyncpg.Connection = Depends(get_p
 
     if msg_type != "Notification":
         return JSONResponse(content={"status": "ignored"})
-
-    # Verify signature before processing notifications
-    if not _verify_sns_signature(body):
-        log.warning("SNS Notification failed signature check — rejected")
-        raise HTTPException(status_code=400, detail="Invalid SNS signature.")
 
     # Validate TopicArn if configured (prevents processing from unexpected topics)
     if settings.ses_topic_arn and body.get("TopicArn") != settings.ses_topic_arn:
