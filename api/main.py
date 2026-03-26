@@ -19,6 +19,9 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
+
+from prometheus_client import Gauge
+from prometheus_fastapi_instrumentator import Instrumentator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -123,6 +126,24 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type"],
     max_age=3600,
+)
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+Instrumentator(
+    should_group_status_codes=False,
+    excluded_handlers=["/metrics"],
+).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+
+# Custom gauges — updated by background tasks or on health checks
+_gauge_subscribers = Gauge(
+    "cloudista_subscribers_total",
+    "Total number of confirmed email subscribers",
+)
+_gauge_posts = Gauge(
+    "cloudista_posts_published_total",
+    "Total number of published blog posts",
 )
 
 # boto3 picks up credentials from the EC2 instance's IAM role automatically.
@@ -372,6 +393,20 @@ async def health():
             raise RuntimeError("pool not initialised")
         async with _pg_pool.acquire(timeout=2.0) as conn:
             await conn.fetchval("SELECT 1")
+            # Refresh Prometheus gauges while we have a live connection
+            try:
+                sub_count = await conn.fetchval(
+                    "SELECT COUNT(*) FROM subscribers WHERE status = 'confirmed'"
+                )
+                post_count = await conn.fetchval(
+                    "SELECT COUNT(*) FROM posts WHERE status = 'published'"
+                )
+                if sub_count is not None:
+                    _gauge_subscribers.set(sub_count)
+                if post_count is not None:
+                    _gauge_posts.set(post_count)
+            except Exception:
+                pass  # gauge refresh is best-effort; don't fail health check
     except Exception as exc:
         log.warning("DB ping failed: %s", exc)
         db_ok = False

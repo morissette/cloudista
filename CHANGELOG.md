@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — add Prometheus metrics endpoint at /metrics
+
+### Added
+- `api/Pipfile` — added `prometheus-fastapi-instrumentator==7.0.2`
+- `api/main.py` — `Instrumentator` instruments all HTTP routes (request count, duration, in-progress); exposes `/metrics` in Prometheus text format; two custom `Gauge` metrics: `cloudista_subscribers_total` (confirmed subscribers) and `cloudista_posts_published_total` (published posts), refreshed on each `/api/health` poll
+- `infra/nginx-cloudista.conf` — added `location = /metrics` proxy block routing to FastAPI
+- `api/tests/test_routes.py` — added `TestMetrics` with 3 smoke tests
+
+---
+
 ## [2026-03-26] — distinguish DB errors from not-found in preferences endpoint
 
 ### Changed

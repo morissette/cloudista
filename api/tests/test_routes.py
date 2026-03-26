@@ -59,6 +59,27 @@ class TestHealth:
 
 
 # ---------------------------------------------------------------------------
+# Prometheus metrics endpoint
+# ---------------------------------------------------------------------------
+
+class TestMetrics:
+    def test_metrics_returns_200(self, client):
+        c, _ = client
+        resp = c.get("/metrics")
+        assert resp.status_code == 200
+
+    def test_metrics_content_type_is_text(self, client):
+        c, _ = client
+        resp = c.get("/metrics")
+        assert "text/plain" in resp.headers["content-type"]
+
+    def test_metrics_contains_http_requests_counter(self, client):
+        c, _ = client
+        resp = c.get("/metrics")
+        assert "http_requests" in resp.text or "http_request" in resp.text
+
+
+# ---------------------------------------------------------------------------
 # Subscribe — pass paths
 # ---------------------------------------------------------------------------
 

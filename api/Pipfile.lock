@@ -1,12 +1,12 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "a0408e47c0c328c827508dd870bd3c13e0d7d313ff8e043c9c55d59e8f52c5ae"
+            "sha256": "219984bd49054859a62611189ff8887223f12f39ed0f67b7e056b449ea119262"
         },
         "pipfile-spec": 6,
         "requires": {
-            "python_full_version": "3.11.6",
-            "python_version": "3.11"
+            "python_full_version": "3.12.0",
+            "python_version": "3.12"
         },
         "sources": [
             {
@@ -27,11 +27,11 @@
         },
         "anyio": {
             "hashes": [
-                "sha256:41cfcc3a4c85d3f05c932da7c26d0201ac36f72abd4435ba90d0464a3ffed703",
-                "sha256:d405828884fc140aa80a3c667b8beed277f1dfedec42ba031bd6ac3db606ab6c"
+                "sha256:08b310f9e24a9594186fd75b4f73f4a4152069e3853f1ed8bfbf58369f4ad708",
+                "sha256:334b70e641fd2221c1505b3890c69882fe4a2df910cba14d97019b90b24439dc"
             ],
-            "markers": "python_version >= '3.9'",
-            "version": "==4.12.1"
+            "markers": "python_version >= '3.10'",
+            "version": "==4.13.0"
         },
         "async-timeout": {
             "hashes": [
@@ -360,6 +360,23 @@
             "markers": "python_version >= '3.8'",
             "version": "==26.0"
         },
+        "prometheus-client": {
+            "hashes": [
+                "sha256:150db128af71a5c2482b36e588fc8a6b95e498750da4b17065947c16070f4055",
+                "sha256:7e0ced7fbbd40f7b84962d5d2ab6f17ef88a72504dcf7c0b40737b43b2a461f9"
+            ],
+            "markers": "python_version >= '3.9'",
+            "version": "==0.24.1"
+        },
+        "prometheus-fastapi-instrumentator": {
+            "hashes": [
+                "sha256:8a4d8fb13dbe19d2882ac6af9ce236e4e1f98dc48e3fa44fe88d8e23ac3c953f",
+                "sha256:975e39992acb7a112758ff13ba95317e6c54d1bbf605f9156f31ac9f2800c32d"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.8'",
+            "version": "==7.0.2"
+        },
         "pycparser": {
             "hashes": [
                 "sha256:600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29",
@@ -509,6 +526,15 @@
             ],
             "markers": "python_version >= '3.10'",
             "version": "==1.2.2"
+        },
+        "python-multipart": {
+            "hashes": [
+                "sha256:8a62d3a8335e06589fe01f2a3e178cdcc632f3fbe0d492ad9ee0ec35aab1f104",
+                "sha256:8dd0cab45b8e23064ae09147625994d090fa46f5b0d1e13af944c331a7fa9d13"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.8'",
+            "version": "==0.0.20"
         },
         "pyyaml": {
             "hashes": [
@@ -986,11 +1012,11 @@
     "develop": {
         "anyio": {
             "hashes": [
-                "sha256:41cfcc3a4c85d3f05c932da7c26d0201ac36f72abd4435ba90d0464a3ffed703",
-                "sha256:d405828884fc140aa80a3c667b8beed277f1dfedec42ba031bd6ac3db606ab6c"
+                "sha256:08b310f9e24a9594186fd75b4f73f4a4152069e3853f1ed8bfbf58369f4ad708",
+                "sha256:334b70e641fd2221c1505b3890c69882fe4a2df910cba14d97019b90b24439dc"
             ],
-            "markers": "python_version >= '3.9'",
-            "version": "==4.12.1"
+            "markers": "python_version >= '3.10'",
+            "version": "==4.13.0"
         },
         "certifi": {
             "hashes": [
