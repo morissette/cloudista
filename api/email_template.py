@@ -10,6 +10,8 @@ Usage:
 """
 from __future__ import annotations  # enables tuple[...] hints on Python 3.8
 
+import html as _html
+
 from config import settings
 
 _SITE_URL = settings.site_url
@@ -103,9 +105,10 @@ def _email_html_wrapper(header_extra: str, body_html: str, footer_html: str) -> 
 
 def _email_footer_html(unsubscribe_url: str, prefs_url: str) -> str:
     """Shared footer HTML for digest and immediate notification emails."""
+    _unsub = _html.escape(unsubscribe_url, quote=True)
     prefs_link = (
         (
-            f' &nbsp;&middot;&nbsp; <a href="{prefs_url}"'
+            f' &nbsp;&middot;&nbsp; <a href="{_html.escape(prefs_url, quote=True)}"'
             ' style="color:#64748b;text-decoration:none;">Manage preferences</a>'
         )
         if prefs_url else ""
@@ -119,7 +122,7 @@ def _email_footer_html(unsubscribe_url: str, prefs_url: str) -> str:
                        padding:20px 40px;text-align:center;">
 
               <p style="margin:0 0 6px;font-size:12px;color:#94a3b8;line-height:1.65;">
-                <a href="{unsubscribe_url}"
+                <a href="{_unsub}"
                    style="color:#64748b;text-decoration:none;">Unsubscribe</a>{prefs_link}
               </p>
               <p style="margin:0;font-size:12px;color:#cbd5e1;">
@@ -132,8 +135,10 @@ def _email_footer_html(unsubscribe_url: str, prefs_url: str) -> str:
 
 def _email_verification_footer_html(unsubscribe_url: str, prefs_url: str) -> str:
     """Footer HTML for the verification email (includes signup attribution text)."""
+    _unsub = _html.escape(unsubscribe_url, quote=True)
+    _site = _html.escape(_SITE_URL, quote=True)
     _prefs_part = (
-        f' &nbsp;&middot;&nbsp; <a href="{prefs_url}"'
+        f' &nbsp;&middot;&nbsp; <a href="{_html.escape(prefs_url, quote=True)}"'
         f' style="color:#64748b;text-decoration:none;">Manage preferences</a>'
     ) if prefs_url else ""
     return f"""          <!-- ── FOOTER ─────────────────────────────────────────────── -->
@@ -146,10 +151,10 @@ def _email_verification_footer_html(unsubscribe_url: str, prefs_url: str) -> str
 
               <p style="margin:0 0 6px;font-size:12px;color:#94a3b8;line-height:1.65;">
                 You received this email because someone signed up at
-                <a href="{_SITE_URL}"
+                <a href="{_site}"
                    style="color:#64748b;text-decoration:none;">cloudista.org</a>.
                 If that wasn't you, you can safely ignore this email or
-                <a href="{unsubscribe_url}"
+                <a href="{_unsub}"
                    style="color:#64748b;text-decoration:none;">unsubscribe</a>{_prefs_part}.
               </p>
               <p style="margin:0;font-size:12px;color:#cbd5e1;">
@@ -177,6 +182,7 @@ def _email_footer_text(unsubscribe_url: str, prefs_url: str) -> str:
 def build_verification_email(confirm_url: str, unsubscribe_url: str, prefs_url: str = "") -> tuple[str, str, str]:
     """Return (subject, html_body, text_body)."""
     subject = "Confirm your Cloudista subscription"
+    _confirm = _html.escape(confirm_url, quote=True)
 
     body_html = f"""
               <!-- Heading -->
@@ -199,7 +205,7 @@ def build_verification_email(confirm_url: str, unsubscribe_url: str, prefs_url: 
               <!--[if mso]>
               <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml"
                            xmlns:w="urn:schemas-microsoft-com:office:word"
-                           href="{confirm_url}"
+                           href="{_confirm}"
                            style="height:50px;v-text-anchor:middle;width:220px;"
                            arcsize="16%" strokecolor="#1d4ed8" fillcolor="#2563eb">
                 <w:anchorlock/>
@@ -214,7 +220,7 @@ def build_verification_email(confirm_url: str, unsubscribe_url: str, prefs_url: 
                 <tr>
                   <td style="border-radius:9px;background:#2563eb;
                               box-shadow:0 4px 14px rgba(37,99,235,.35);">
-                    <a href="{confirm_url}" target="_blank"
+                    <a href="{_confirm}" target="_blank"
                        style="display:inline-block;padding:15px 30px;
                               color:#ffffff;font-size:16px;font-weight:700;
                               text-decoration:none;letter-spacing:-0.01em;
@@ -239,8 +245,8 @@ def build_verification_email(confirm_url: str, unsubscribe_url: str, prefs_url: 
                       Button not working? Copy and paste this URL into your browser:
                     </p>
                     <p style="margin:0;font-size:11.5px;word-break:break-all;line-height:1.6;">
-                      <a href="{confirm_url}"
-                         style="color:#2563eb;text-decoration:none;">{confirm_url}</a>
+                      <a href="{_confirm}"
+                         style="color:#2563eb;text-decoration:none;">{_confirm}</a>
                     </p>
                   </td>
                 </tr>
@@ -289,18 +295,21 @@ def build_digest_email(
     cards_html = ""
     for i, post in enumerate(posts):
         post_url = f"{_SITE_URL}/blog/{post['slug']}"
+        _post_url = _html.escape(post_url, quote=True)
+        _title = _html.escape(post["title"])
         excerpt = post.get("excerpt") or ""
+        _excerpt = _html.escape(excerpt)
         if i > 0:
             cards_html += '<hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0;">\n'
         cards_html += f"""
               <h2 style="margin:0 0 8px;font-size:19px;font-weight:800;
                           color:#0f172a;letter-spacing:-0.03em;line-height:1.3;">
-                <a href="{post_url}" style="color:#0f172a;text-decoration:none;">{post['title']}</a>
+                <a href="{_post_url}" style="color:#0f172a;text-decoration:none;">{_title}</a>
               </h2>
               <p style="margin:0 0 12px;font-size:14.5px;color:#475569;line-height:1.7;">
-                {excerpt}
+                {_excerpt}
               </p>
-              <a href="{post_url}"
+              <a href="{_post_url}"
                  style="font-size:13px;color:#2563eb;text-decoration:none;font-weight:600;">
                 Read more &rarr;
               </a>"""
@@ -340,21 +349,24 @@ def build_immediate_email(
     """
     subject = f"New on Cloudista: {post['title']}"
     post_url = f"{_SITE_URL}/blog/{post['slug']}"
+    _post_url = _html.escape(post_url, quote=True)
+    _title = _html.escape(post["title"])
     excerpt = post.get("excerpt") or ""
+    _excerpt = _html.escape(excerpt)
 
     body_html = f"""
               <h1 style="margin:0 0 14px;font-size:26px;font-weight:900;
                           color:#0f172a;letter-spacing:-0.035em;line-height:1.15;">
-                <a href="{post_url}" style="color:#0f172a;text-decoration:none;">{post['title']}</a>
+                <a href="{_post_url}" style="color:#0f172a;text-decoration:none;">{_title}</a>
               </h1>
               <p style="margin:0 0 28px;font-size:15.5px;color:#475569;line-height:1.75;">
-                {excerpt}
+                {_excerpt}
               </p>
               <table cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="border-radius:9px;background:#2563eb;
                               box-shadow:0 4px 14px rgba(37,99,235,.35);">
-                    <a href="{post_url}" target="_blank"
+                    <a href="{_post_url}" target="_blank"
                        style="display:inline-block;padding:15px 30px;
                               color:#ffffff;font-size:16px;font-weight:700;
                               text-decoration:none;letter-spacing:-0.01em;
