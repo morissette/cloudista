@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
@@ -14,10 +15,18 @@ class MessageOut(BaseModel):
     message: str
 
 
+class SubscribeSource(str, Enum):
+    """Known subscription sources. Constrains the `source` field to prevent
+    arbitrary strings from being stored in the database."""
+    COMING_SOON = "coming_soon"
+    BLOG = "blog"
+    LANDING_PAGE = "landing_page"
+    FOOTER = "footer"
+
+
 class SubscribeIn(BaseModel):
     email: EmailStr
-    # Lowercase alphanumeric + underscores only; prevents arbitrary string storage
-    source: str = Field(default="coming_soon", max_length=100, pattern=r"^[a-z0-9_]+$")
+    source: SubscribeSource = SubscribeSource.COMING_SOON
     cf_turnstile_token: str | None = Field(default=None, max_length=2048)
 
 

@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — constrain subscribe source field to known enum values
+
+### Changed
+- `api/schemas.py` — replaced free-form `source: str` with `SubscribeSource(str, Enum)` containing four known values (`coming_soon`, `blog`, `landing_page`, `footer`); unknown strings now produce a 422 at validation time
+- `api/tests/test_schemas.py` — updated tests to use enum values; replaced `max_length` tests with `test_invalid_source_rejected` and `test_all_valid_sources_accepted`
+
+---
+
 ## [2026-03-26] — add TTL to SNS certificate cache
 
 ### Changed
