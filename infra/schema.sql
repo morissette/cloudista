@@ -118,4 +118,13 @@ CREATE INDEX IF NOT EXISTS idx_post_revisions_post_id
 --
 --  CREATE INDEX IF NOT EXISTS idx_posts_unnotified
 --    ON posts (published_at DESC) WHERE status = 'published' AND notified_at IS NULL;
+--
+-- ============================================================
+--  Add 'unlisted' post status (run once on production):
+--  Unlisted posts are accessible via direct URL and site search,
+--  but excluded from listings, sitemap, and get a noindex meta tag.
+--
+--  ALTER TABLE posts DROP CONSTRAINT posts_status_check;
+--  ALTER TABLE posts ADD CONSTRAINT posts_status_check
+--    CHECK (status IN ('draft', 'published', 'archived', 'unlisted'));
 -- ============================================================

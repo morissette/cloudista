@@ -33,13 +33,13 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.x509 import load_pem_x509_certificate
 from dependencies import _real_ip, close_pool, get_pg_conn, init_pool, limiter
-from email_template import build_verification_email
+from email_template import build_contact_email, build_verification_email
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from prometheus_client import Gauge
 from prometheus_fastapi_instrumentator import Instrumentator
-from schemas import HealthOut, MessageOut, PreferencesIn, SubscribeIn
+from schemas import ContactIn, HealthOut, MessageOut, PreferencesIn, SubscribeIn
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -656,6 +656,62 @@ async def update_preferences(
         raise HTTPException(status_code=500, detail="Could not save preferences.")
 
     return RedirectResponse(url=f"{settings.site_url}/api/preferences/{token}?saved=1", status_code=303)
+
+
+@app.post("/api/contact", response_model=MessageOut, status_code=200)
+@limiter.limit("5/minute")
+async def contact(request: Request, body: ContactIn):
+    """
+    Handle consulting enquiries from the work-with-me page.
+    Validates the request, optionally verifies Turnstile, and forwards
+    the enquiry as an email to admin@cloudista.org via SES.
+    """
+    ip = _real_ip(request)
+
+    if body.cf_turnstile_token:
+        if not settings.turnstile_secret:
+            log.warning("Turnstile token received but TURNSTILE_SECRET not configured — skipping")
+        else:
+            result = await _verify_turnstile(body.cf_turnstile_token, ip)
+            if result is TurnstileResult.INVALID:
+                raise HTTPException(status_code=400, detail="CAPTCHA verification failed.")
+
+    engagement_labels = {
+        "audit": "Platform audit",
+        "sprint": "Sprint embed",
+        "retainer": "Advisory retainer",
+        "other": "Something else",
+    }
+    engagement_label = engagement_labels.get(body.engagement, "Not specified")
+
+    subject, html_body, text_body = build_contact_email(
+        name=body.name,
+        email=body.email,
+        company=body.company,
+        engagement_label=engagement_label,
+        situation=body.situation,
+    )
+
+    try:
+        await asyncio.to_thread(
+            _ses.send_email,
+            Source=settings.from_email,
+            Destination={"ToAddresses": ["admin@cloudista.org"]},
+            ReplyToAddresses=[body.email],
+            Message={
+                "Subject": {"Data": subject, "Charset": "UTF-8"},
+                "Body": {
+                    "Html": {"Data": html_body, "Charset": "UTF-8"},
+                    "Text": {"Data": text_body, "Charset": "UTF-8"},
+                },
+            },
+        )
+        log.info("Contact enquiry from %s (%s)", body.name, body.email)
+    except (BotoCoreError, ClientError) as exc:
+        log.error("SES send failed for contact enquiry from %s: %s", body.email, exc)
+        raise HTTPException(status_code=503, detail="Failed to send message. Please try again.")
+
+    return MessageOut(message="Message sent. I'll be in touch within one business day.")
 
 
 @app.post("/api/ses-webhook", include_in_schema=False)

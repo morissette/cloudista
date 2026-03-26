@@ -51,15 +51,17 @@ ok "Deploy hash: ${DEPLOY_HASH}"
 if [[ "$MODE" != "--api" ]]; then
   step "Deploying static site files..."
   # Inject hash into site/index.html so main.js and style.css URLs are cache-busted
-  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" site/index.html > /tmp/site-index.html
+  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" site/index.html        > /tmp/site-index.html
+  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" site/work-with-me.html > /tmp/work-with-me.html
   # /www/ is root-owned — scp to tmp, then sudo mv into place
-  scp_file /tmp/site-index.html site/style.css site/main.js site/robots.txt \
+  scp_file /tmp/site-index.html /tmp/work-with-me.html site/style.css site/main.js site/robots.txt \
     site/privacy.html site/terms.html \
     site/assets/og-image.png \
     site/assets/favicon.svg site/assets/favicon.ico site/assets/favicon-32x32.png \
     site/assets/favicon-192x192.png site/assets/apple-touch-icon.png site/assets/site.webmanifest \
     "$SSH_HOST:/tmp/"
   ssh_cmd "sudo mv /tmp/site-index.html $REMOTE_WEB/index.html && \
+    sudo mv /tmp/work-with-me.html $REMOTE_WEB/work-with-me.html && \
     sudo mv /tmp/style.css /tmp/main.js \
     /tmp/robots.txt /tmp/og-image.png \
     /tmp/privacy.html /tmp/terms.html \
@@ -71,10 +73,11 @@ if [[ "$MODE" != "--api" ]]; then
   step "Deploying blog static files..."
   ssh_cmd "sudo mkdir -p $REMOTE_WEB/blog && sudo chown ec2-user:ec2-user $REMOTE_WEB/blog"
   # Inject git hash into HTML so browsers bust the cache on each deploy
-  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" blog-site/index.html > /tmp/blog-index.html
-  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" blog-site/post.html  > /tmp/blog-post.html
-  scp_file /tmp/blog-index.html /tmp/blog-post.html blog-site/blog.js "$SSH_HOST:/tmp/"
-  ssh_cmd "sudo mv /tmp/blog-index.html $REMOTE_WEB/blog/index.html && sudo mv /tmp/blog-post.html $REMOTE_WEB/blog/post.html && sudo mv /tmp/blog.js $REMOTE_WEB/blog/blog.js"
+  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" blog-site/index.html   > /tmp/blog-index.html
+  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" blog-site/post.html    > /tmp/blog-post.html
+  sed "s/__DEPLOY_HASH__/${DEPLOY_HASH}/g" blog-site/archive.html > /tmp/blog-archive.html
+  scp_file /tmp/blog-index.html /tmp/blog-post.html /tmp/blog-archive.html blog-site/blog.js "$SSH_HOST:/tmp/"
+  ssh_cmd "sudo mv /tmp/blog-index.html $REMOTE_WEB/blog/index.html && sudo mv /tmp/blog-post.html $REMOTE_WEB/blog/post.html && sudo mv /tmp/blog-archive.html $REMOTE_WEB/blog/archive.html && sudo mv /tmp/blog.js $REMOTE_WEB/blog/blog.js"
   ok "blog pages uploaded"
 fi
 
