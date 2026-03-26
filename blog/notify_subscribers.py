@@ -136,13 +136,13 @@ def run_digest(conn: Any, ses: Any, dry_run: bool) -> None:
     for sub in subscribers:
         since = sub["last_digest_at"]
         if since is None:
-            # First digest — send last 10 posts
+            # First digest — send last 5 posts
             cur.execute("""
                 SELECT slug, title, excerpt, image_url, published_at
                 FROM posts
                 WHERE status = 'published' AND published_at <= now()
                 ORDER BY published_at DESC
-                LIMIT 10
+                LIMIT 5
             """)
         else:
             cur.execute("""
@@ -152,14 +152,12 @@ def run_digest(conn: Any, ses: Any, dry_run: bool) -> None:
                   AND published_at <= now()
                   AND published_at > %s
                 ORDER BY published_at DESC
+                LIMIT 5
             """, (since,))
 
         posts = cur.fetchall()
         if not posts:
             log.info("  No new posts for %s since last digest — skipping", sub["email"])
-            if not dry_run:
-                cur.execute("UPDATE subscribers SET last_digest_at = now() WHERE id = %s", (sub["id"],))
-                conn.commit()
             continue
 
         unsub_url = f"{SITE_URL}/api/unsubscribe/{sub['token']}"
