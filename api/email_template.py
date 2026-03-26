@@ -11,10 +11,9 @@ Usage:
 from __future__ import annotations  # enables tuple[...] hints on Python 3.8
 
 import html as _html
+import os
 
-from config import settings
-
-_SITE_URL = settings.site_url
+_SITE_URL = os.environ.get("SITE_URL", "https://cloudista.org")
 
 
 # ── Shared layout helpers ──────────────────────────────────────────────────────
