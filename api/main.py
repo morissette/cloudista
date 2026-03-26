@@ -25,7 +25,7 @@ from enum import Enum
 
 import asyncpg
 import boto3
-from blog_routes import html_router as blog_html_router
+from blog_routes import _counter_post_views, html_router as blog_html_router
 from blog_routes import router as blog_router
 from botocore.exceptions import BotoCoreError, ClientError
 from config import settings
@@ -98,10 +98,67 @@ class TurnstileResult(Enum):
 # ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
+async def _seed_post_view_metrics() -> None:
+    """Seed Prometheus post-view metrics from DB so counters survive restarts."""
+    from dependencies import _pg_pool as pool
+    async with pool.acquire() as conn:
+        # Option A: pre-seed the per-request counter so rate() is continuous
+        rows = await conn.fetch(
+            """
+            SELECT p.slug, pv.country, pv.is_bot, SUM(pv.view_count)::bigint AS total
+            FROM post_views pv
+            JOIN posts p ON p.id = pv.post_id
+            GROUP BY p.slug, pv.country, pv.is_bot
+            """
+        )
+        for row in rows:
+            _counter_post_views.labels(
+                slug=row["slug"],
+                country=row["country"],
+                is_bot=str(row["is_bot"]),
+            ).inc(row["total"])
+
+        # Option B: set all-time human view gauge per slug
+        await _refresh_post_views_db_gauge(conn)
+
+
+async def _refresh_post_views_db_gauge(conn) -> None:
+    """Update the all-time human view gauge from the DB."""
+    rows = await conn.fetch(
+        """
+        SELECT p.slug, SUM(pv.view_count)::bigint AS total
+        FROM post_views pv
+        JOIN posts p ON p.id = pv.post_id
+        WHERE pv.is_bot = false
+        GROUP BY p.slug
+        """
+    )
+    for row in rows:
+        _gauge_post_views_db.labels(slug=row["slug"]).set(row["total"])
+
+
+async def _post_views_gauge_loop() -> None:
+    """Refresh the all-time post views gauge every 60 seconds."""
+    from dependencies import _pg_pool as pool
+    while True:
+        await asyncio.sleep(60)
+        try:
+            async with pool.acquire() as conn:
+                await _refresh_post_views_db_gauge(conn)
+        except Exception as exc:
+            log.warning("post views gauge refresh failed: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_pool()
+    try:
+        await _seed_post_view_metrics()
+    except Exception as exc:
+        log.warning("post view metric seeding failed: %s", exc)
+    task = asyncio.create_task(_post_views_gauge_loop())
     yield
+    task.cancel()
     await close_pool()
 
 
@@ -152,6 +209,11 @@ _gauge_posts_unlisted = Gauge(
 _gauge_posts_total = Gauge(
     "cloudista_posts_total",
     "Total number of blog posts (all statuses)",
+)
+_gauge_post_views_db = Gauge(
+    "cloudista_post_views_db_total",
+    "All-time human post view count from DB by slug",
+    ["slug"],
 )
 
 # boto3 picks up credentials from the EC2 instance's IAM role automatically.
