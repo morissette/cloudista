@@ -39,7 +39,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from prometheus_client import Gauge
 from prometheus_fastapi_instrumentator import Instrumentator
-from schemas import HealthOut, MessageOut, PreferencesIn, SubscribeIn
+from schemas import ContactIn, HealthOut, MessageOut, PreferencesIn, SubscribeIn
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -656,6 +656,83 @@ async def update_preferences(
         raise HTTPException(status_code=500, detail="Could not save preferences.")
 
     return RedirectResponse(url=f"{settings.site_url}/api/preferences/{token}?saved=1", status_code=303)
+
+
+@app.post("/api/contact", response_model=MessageOut, status_code=200)
+@limiter.limit("5/minute")
+async def contact(request: Request, body: ContactIn):
+    """
+    Handle consulting enquiries from the work-with-me page.
+    Validates the request, optionally verifies Turnstile, and forwards
+    the enquiry as an email to admin@cloudista.org via SES.
+    """
+    ip = _real_ip(request)
+
+    if body.cf_turnstile_token:
+        if not settings.turnstile_secret:
+            log.warning("Turnstile token received but TURNSTILE_SECRET not configured — skipping")
+        else:
+            result = await _verify_turnstile(body.cf_turnstile_token, ip)
+            if result is TurnstileResult.INVALID:
+                raise HTTPException(status_code=400, detail="CAPTCHA verification failed.")
+
+    engagement_labels = {
+        "audit": "Platform audit",
+        "sprint": "Sprint embed",
+        "retainer": "Advisory retainer",
+        "other": "Something else",
+    }
+    engagement_label = engagement_labels.get(body.engagement, "Not specified")
+    company_line = body.company or "—"
+
+    html_body = f"""
+<html><body style="font-family:sans-serif;color:#1a1917;max-width:600px;margin:0 auto;padding:24px;">
+<h2 style="margin-bottom:4px;">New consulting enquiry</h2>
+<p style="color:#7a7774;font-size:13px;margin-top:0;">Submitted via cloudista.org/work-with-me</p>
+<hr style="border:none;border-top:1px solid #e2e0db;margin:20px 0;">
+<table style="width:100%;border-collapse:collapse;font-size:14px;">
+  <tr><td style="padding:8px 0;color:#7a7774;width:130px;">Name</td><td style="padding:8px 0;">{body.name}</td></tr>
+  <tr><td style="padding:8px 0;color:#7a7774;">Email</td>
+      <td style="padding:8px 0;"><a href="mailto:{body.email}">{body.email}</a></td></tr>
+  <tr><td style="padding:8px 0;color:#7a7774;">Company</td><td style="padding:8px 0;">{company_line}</td></tr>
+  <tr><td style="padding:8px 0;color:#7a7774;">Engagement</td><td style="padding:8px 0;">{engagement_label}</td></tr>
+</table>
+<hr style="border:none;border-top:1px solid #e2e0db;margin:20px 0;">
+<p style="color:#7a7774;font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">Situation</p>
+<p style="font-size:15px;line-height:1.7;white-space:pre-wrap;">{body.situation}</p>
+</body></html>
+"""
+
+    text_body = (
+        f"New consulting enquiry\n"
+        f"{'=' * 40}\n"
+        f"Name:       {body.name}\n"
+        f"Email:      {body.email}\n"
+        f"Company:    {company_line}\n"
+        f"Engagement: {engagement_label}\n\n"
+        f"Situation:\n{body.situation}\n"
+    )
+
+    try:
+        await asyncio.to_thread(
+            _ses.send_email,
+            Source=settings.from_email,
+            Destination={"ToAddresses": ["admin@cloudista.org"]},
+            ReplyToAddresses=[body.email],
+            Message={
+                "Subject": {"Data": f"Consulting enquiry: {body.name}", "Charset": "UTF-8"},
+                "Body": {
+                    "Html": {"Data": html_body, "Charset": "UTF-8"},
+                    "Text": {"Data": text_body, "Charset": "UTF-8"},
+                },
+            },
+        )
+        log.info("Contact enquiry from %s (%s)", body.name, body.email)
+    except (BotoCoreError, ClientError) as exc:
+        log.error("SES send failed for contact enquiry from %s: %s", body.email, exc)
+        raise HTTPException(status_code=503, detail="Failed to send message. Please try again.")
+
+    return MessageOut(message="Message sent. I'll be in touch within one business day.")
 
 
 @app.post("/api/ses-webhook", include_in_schema=False)
