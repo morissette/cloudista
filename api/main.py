@@ -19,9 +19,6 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
-
-from prometheus_client import Gauge
-from prometheus_fastapi_instrumentator import Instrumentator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -40,6 +37,8 @@ from email_template import build_verification_email
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from prometheus_client import Gauge
+from prometheus_fastapi_instrumentator import Instrumentator
 from schemas import HealthOut, MessageOut, PreferencesIn, SubscribeIn
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
