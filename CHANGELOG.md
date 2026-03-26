@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — fix confirm banner missing on blog listing page
+
+### Fixed
+- `blog-site/index.html` — added `#confirm-banner` div and `main.js` script tag; the blog listing page (root `/`) had neither, so email confirmation redirects to `/?confirmed=1` or `/?confirmed=already` showed no visible feedback to the subscriber
+
+---
+
 ## [2026-03-26] — referrer tracking in post view metrics
 
 ### Added
