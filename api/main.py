@@ -25,7 +25,8 @@ from enum import Enum
 
 import asyncpg
 import boto3
-from blog_routes import _counter_post_views, html_router as blog_html_router
+from blog_routes import _counter_post_views
+from blog_routes import html_router as blog_html_router
 from blog_routes import router as blog_router
 from botocore.exceptions import BotoCoreError, ClientError
 from config import settings

@@ -94,8 +94,9 @@ class TestMetrics:
         """_seed_post_view_metrics pre-seeds the counter from DB rows."""
         import asyncio
         from unittest.mock import AsyncMock, MagicMock, patch
-        from main import _seed_post_view_metrics
+
         from blog_routes import _counter_post_views
+        from main import _seed_post_view_metrics
 
         fake_rows = [
             {"slug": "my-post", "country": "US", "is_bot": False, "total": 42},
