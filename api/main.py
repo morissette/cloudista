@@ -33,7 +33,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.x509 import load_pem_x509_certificate
 from dependencies import _real_ip, close_pool, get_pg_conn, init_pool, limiter
-from email_template import build_verification_email
+from email_template import build_contact_email, build_verification_email
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -683,34 +683,13 @@ async def contact(request: Request, body: ContactIn):
         "other": "Something else",
     }
     engagement_label = engagement_labels.get(body.engagement, "Not specified")
-    company_line = body.company or "—"
 
-    html_body = f"""
-<html><body style="font-family:sans-serif;color:#1a1917;max-width:600px;margin:0 auto;padding:24px;">
-<h2 style="margin-bottom:4px;">New consulting enquiry</h2>
-<p style="color:#7a7774;font-size:13px;margin-top:0;">Submitted via cloudista.org/work-with-me</p>
-<hr style="border:none;border-top:1px solid #e2e0db;margin:20px 0;">
-<table style="width:100%;border-collapse:collapse;font-size:14px;">
-  <tr><td style="padding:8px 0;color:#7a7774;width:130px;">Name</td><td style="padding:8px 0;">{body.name}</td></tr>
-  <tr><td style="padding:8px 0;color:#7a7774;">Email</td>
-      <td style="padding:8px 0;"><a href="mailto:{body.email}">{body.email}</a></td></tr>
-  <tr><td style="padding:8px 0;color:#7a7774;">Company</td><td style="padding:8px 0;">{company_line}</td></tr>
-  <tr><td style="padding:8px 0;color:#7a7774;">Engagement</td><td style="padding:8px 0;">{engagement_label}</td></tr>
-</table>
-<hr style="border:none;border-top:1px solid #e2e0db;margin:20px 0;">
-<p style="color:#7a7774;font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">Situation</p>
-<p style="font-size:15px;line-height:1.7;white-space:pre-wrap;">{body.situation}</p>
-</body></html>
-"""
-
-    text_body = (
-        f"New consulting enquiry\n"
-        f"{'=' * 40}\n"
-        f"Name:       {body.name}\n"
-        f"Email:      {body.email}\n"
-        f"Company:    {company_line}\n"
-        f"Engagement: {engagement_label}\n\n"
-        f"Situation:\n{body.situation}\n"
+    subject, html_body, text_body = build_contact_email(
+        name=body.name,
+        email=body.email,
+        company=body.company,
+        engagement_label=engagement_label,
+        situation=body.situation,
     )
 
     try:
@@ -720,7 +699,7 @@ async def contact(request: Request, body: ContactIn):
             Destination={"ToAddresses": ["admin@cloudista.org"]},
             ReplyToAddresses=[body.email],
             Message={
-                "Subject": {"Data": f"Consulting enquiry: {body.name}", "Charset": "UTF-8"},
+                "Subject": {"Data": subject, "Charset": "UTF-8"},
                 "Body": {
                     "Html": {"Data": html_body, "Charset": "UTF-8"},
                     "Text": {"Data": text_body, "Charset": "UTF-8"},

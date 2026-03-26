@@ -280,6 +280,115 @@ To unsubscribe: {unsubscribe_url}{(chr(10) + "Manage preferences: " + prefs_url)
     return subject, html, text
 
 
+def build_contact_email(
+    name: str,
+    email: str,
+    company: str,
+    engagement_label: str,
+    situation: str,
+) -> tuple[str, str, str]:
+    """Return (subject, html_body, text_body) for an inbound consulting enquiry."""
+    e = _html.escape
+    subject = f"Consulting enquiry: {name}"
+
+    company_cell  = e(company)  if company  else "—"
+    engagement_cell = e(engagement_label)
+
+    body_html = f"""
+              <h1 style="margin:0 0 6px;font-size:22px;font-weight:900;
+                          color:#0f172a;letter-spacing:-0.03em;line-height:1.2;">
+                New consulting enquiry
+              </h1>
+              <p style="margin:0 0 28px;font-size:13px;color:#94a3b8;">
+                Submitted via cloudista.org/work-with-me
+              </p>
+
+              <!-- Metadata table -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="border:1px solid #e2e8f0;border-radius:10px;
+                            border-collapse:separate;border-spacing:0;
+                            overflow:hidden;margin-bottom:28px;">
+                <tr style="background:#f8fafc;">
+                  <td style="padding:12px 16px;font-size:11px;font-weight:700;
+                              color:#94a3b8;letter-spacing:0.07em;text-transform:uppercase;
+                              width:120px;border-bottom:1px solid #e2e8f0;">Name</td>
+                  <td style="padding:12px 16px;font-size:14px;color:#0f172a;
+                              border-bottom:1px solid #e2e8f0;">{e(name)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 16px;font-size:11px;font-weight:700;
+                              color:#94a3b8;letter-spacing:0.07em;text-transform:uppercase;
+                              border-bottom:1px solid #e2e8f0;">Email</td>
+                  <td style="padding:12px 16px;font-size:14px;
+                              border-bottom:1px solid #e2e8f0;">
+                    <a href="mailto:{e(email)}"
+                       style="color:#2563eb;text-decoration:none;">{e(email)}</a>
+                  </td>
+                </tr>
+                <tr style="background:#f8fafc;">
+                  <td style="padding:12px 16px;font-size:11px;font-weight:700;
+                              color:#94a3b8;letter-spacing:0.07em;text-transform:uppercase;
+                              border-bottom:1px solid #e2e8f0;">Company</td>
+                  <td style="padding:12px 16px;font-size:14px;color:#0f172a;
+                              border-bottom:1px solid #e2e8f0;">{company_cell}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 16px;font-size:11px;font-weight:700;
+                              color:#94a3b8;letter-spacing:0.07em;text-transform:uppercase;">
+                    Engagement</td>
+                  <td style="padding:12px 16px;font-size:14px;color:#0f172a;">
+                    {engagement_cell}</td>
+                </tr>
+              </table>
+
+              <!-- Situation -->
+              <p style="margin:0 0 10px;font-size:11px;font-weight:700;
+                         color:#94a3b8;letter-spacing:0.07em;text-transform:uppercase;">
+                Situation
+              </p>
+              <div style="background:#f8fafc;border-left:3px solid #2563eb;
+                          border-radius:0 8px 8px 0;padding:16px 20px;">
+                <p style="margin:0;font-size:14.5px;color:#334155;
+                           line-height:1.75;white-space:pre-wrap;">{e(situation)}</p>
+              </div>"""
+
+    # Simple admin footer — no unsubscribe needed
+    footer_html = """          <tr>
+            <td class="footer-pad"
+                style="background:#f8fafc;
+                       border:1px solid #e2e8f0;border-top:none;
+                       border-radius:0 0 14px 14px;
+                       padding:20px 40px;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#cbd5e1;">
+                &copy; 2026 Cloudista &nbsp;&middot;&nbsp; All rights reserved
+              </p>
+            </td>
+          </tr>"""
+
+    header_extra = """
+              <p style="margin:12px 0 0;display:inline-block;
+                         background:rgba(255,255,255,.15);border-radius:100px;
+                         padding:4px 14px;font-size:12px;font-weight:600;
+                         color:rgba(255,255,255,.9);letter-spacing:0.03em;">
+                New enquiry
+              </p>"""
+
+    html = _email_html_wrapper(header_extra, body_html, footer_html)
+
+    text = (
+        f"Consulting enquiry: {name}\n"
+        f"{'=' * (22 + len(name))}\n\n"
+        f"Name:       {name}\n"
+        f"Email:      {email}\n"
+        f"Company:    {company or '—'}\n"
+        f"Engagement: {engagement_label}\n\n"
+        f"Situation:\n{situation}\n\n"
+        f"---\n© 2026 Cloudista\n"
+    )
+
+    return subject, html, text
+
+
 def build_digest_email(
     posts: list[dict], unsubscribe_url: str, prefs_url: str
 ) -> tuple[str, str, str]:
