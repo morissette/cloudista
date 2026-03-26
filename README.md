@@ -1,5 +1,9 @@
 # cloudista.org
 
+[![Lint](https://github.com/morissette/cloudista/actions/workflows/lint.yml/badge.svg)](https://github.com/morissette/cloudista/actions/workflows/lint.yml)
+[![Test](https://github.com/morissette/cloudista/actions/workflows/test.yml/badge.svg)](https://github.com/morissette/cloudista/actions/workflows/test.yml)
+[![Deploy](https://github.com/morissette/cloudista/actions/workflows/deploy.yml/badge.svg)](https://github.com/morissette/cloudista/actions/workflows/deploy.yml)
+
 Personal technical blog covering DevOps, platform engineering, Kubernetes, cloud infrastructure, and SRE. Live at [cloudista.org](https://cloudista.org).
 
 ---
