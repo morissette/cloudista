@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-03-26] — add Turnstile CAPTCHA coverage tests
+
+### Changed
+- `api/tests/test_routes.py` — added `TestTurnstile` class with 3 tests: invalid token returns 400, Cloudflare unavailability allows the request (fail-open), and no token skips CAPTCHA check entirely; renamed `test_source_too_long_returns_422` to `test_invalid_source_returns_422`
+
+---
+
 ## [2026-03-26] — constrain subscribe source field to known enum values
 
 ### Changed

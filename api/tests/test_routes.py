@@ -121,10 +121,61 @@ class TestSubscribeFail:
         resp = c.post("/api/subscribe", json={"email": "not-an-email"})
         assert resp.status_code == 422
 
-    def test_source_too_long_returns_422(self, client):
+    def test_invalid_source_returns_422(self, client):
         c, _ = client
-        resp = c.post("/api/subscribe", json={"email": "a@b.com", "source": "x" * 101})
+        resp = c.post("/api/subscribe", json={"email": "a@b.com", "source": "unknown_source"})
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Turnstile CAPTCHA
+# ---------------------------------------------------------------------------
+
+class TestTurnstile:
+    def test_invalid_token_returns_400(self, client):
+        c, _ = client
+        import main as _main
+        with patch("main._verify_turnstile", new_callable=AsyncMock) as mock_verify, \
+             patch.object(_main.settings, "turnstile_secret", "test-secret"):
+            mock_verify.return_value = _main.TurnstileResult.INVALID
+            resp = c.post(
+                "/api/subscribe",
+                json={"email": "a@b.com", "cf_turnstile_token": "bad-token"},
+            )
+        assert resp.status_code == 400
+        assert "CAPTCHA" in resp.json()["detail"]
+
+    def test_unavailable_captcha_allows_subscribe(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=None)
+        conn.execute = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        import main as _main
+        with patch("main._verify_turnstile", new_callable=AsyncMock) as mock_verify, \
+             patch.object(_main.settings, "turnstile_secret", "test-secret"), \
+             patch("main._try_send_verification", new_callable=AsyncMock):
+            mock_verify.return_value = _main.TurnstileResult.UNAVAILABLE
+            resp = c.post(
+                "/api/subscribe",
+                json={"email": "a@b.com", "cf_turnstile_token": "some-token"},
+                headers={"X-Real-IP": "10.0.0.99"},
+            )
+        assert resp.status_code == 201
+
+    def test_no_token_skips_captcha(self, client):
+        c, conn = client
+        conn.fetchrow = AsyncMock(return_value=None)
+        conn.execute = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=_async_cm())
+
+        with patch("main._try_send_verification", new_callable=AsyncMock):
+            resp = c.post(
+                "/api/subscribe",
+                json={"email": "a@b.com"},
+                headers={"X-Real-IP": "10.0.0.98"},
+            )
+        assert resp.status_code == 201
 
 
 # ---------------------------------------------------------------------------
