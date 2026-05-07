@@ -1,0 +1,67 @@
+Title: Automating the Full Engineering Workflow with Claude Code Custom Commands
+Author: Marie H.
+Date: 2026-04-14
+============================================================
+# Automating the Full Engineering Workflow with Claude Code Custom Commands
+
+Software engineering work follows repeatable patterns. A Jira ticket goes through the same lifecycle every time: read the ticket, explore the codebase, implement the change, lint everything, push, trigger a build, watch it fail, fix it, repeat until green, validate cloud state, write the PR. The steps don't change. The commands are the same. The checklist is the same.
+
+Custom commands in Claude Code let you encode those patterns once and invoke them with a slash command. Every session starts with full context about the workflow without re-explaining it. These are two commands I built for a production GCP infrastructure codebase.
+
+## `/resolve-ticket` — End-to-End Jira Ticket Resolution
+
+This command encodes the full ticket-to-PR workflow in six phases. You invoke it with a ticket ID and an optional component name:
+
+```
+/resolve-ticket INFRA-1234 [component=customer-portal]
+```
+
+**Phase 0: Context Discovery.** Before touching any code, the command reads project memory files and `CLAUDE.md` to load full context: Jira base URL and token location, the correct Jenkins job path (which differs between app repos and the infrastructure repo), GCP project IDs for sandbox and production, and any team conventions.
+
+The Jenkins topology is fully encoded in the command. For the infrastructure repo: `kubectl port-forward -n jenkins jenkins-0 8080:8080` to reach Jenkins; job at `job/cluster-create/job/platform-infrastructure/job/<branch>`; always use `smoke_branch=develop`. That last point matters — infra branch names don't exist in app repos. Using the infra branch name as `smoke_branch` causes all smoke tests to fail with "No such job." I've watched that mistake happen twice. It's encoded now.
+
+**Phase 1: Spike.** Read the Jira ticket via REST API. Extract summary, description, acceptance criteria. Explore the codebase, trace the data flow end to end, identify all files that need to change. State the root cause and approach before writing any code. For non-trivial changes: confirm the plan first.
+
+**Phase 2: Implementation.** Make changes, then lint before every commit. The linter selection is auto-detected from config files:
+
+| Changed file type | Config check | Command |
+|---|---|---|
+| `*.groovy` | `.groovylintrc.json` | `npm-groovy-lint <changed-files>` |
+| `terraform/` | `.tflint.hcl` | `tflint --minimum-failure-severity=warning` |
+| `*.sh` | — | `shellcheck <changed-files>` |
+| `*.py` | `.pylintrc` | `pylint <changed-files>` |
+| `.github/workflows/` | `actionlint.yaml` | `actionlint -config-file actionlint.yaml` |
+
+Zero errors required. Always `git add <specific files>` — never `git add -A`.
+
+**Phase 3: Jenkins Build/Test Loop.** Check if Jenkins is reachable (set up the port-forward if not). Get a fresh CSRF crumb. Trigger the sandbox build with correct parameters.
+
+Speed optimization: if a RUNNING cluster already exists in GCP, pass `cluster_name=<existing-cluster>` to skip the 15-minute Terraform apply step. `gcloud container clusters list --project=<sandbox-project> --filter="status=RUNNING"` finds active clusters. This alone saves significant time per ticket.
+
+Monitor by polling the build console every 60 seconds. On failure: read the console via the REST API, identify root cause, fix → lint → commit → retrigger. Repeat until green.
+
+**Phase 4: Validation.** Confirm cloud resource state matches expectations with `gcloud` commands. Check each failed smoke test against the last 10 `develop` build results to distinguish regressions from pre-existing flakiness.
+
+Known pre-existing flaky apps in this codebase (as of early 2026):
+- `signaltrack-app`: UNSTABLE ~70% of `develop` builds
+- `opsboard`: FAILURE ~10% of `develop` builds
+
+**Phase 5: PR Creation.** The PR body template is prescriptive: what changed and why (with Jira reference), a key changes table, Jenkins URLs for each test path, gcloud output confirming expected cloud resource state, a smoke test results table, and documentation of any pre-existing failures with historical evidence.
+
+**Phase 6: Wrap-up.** Save anything new to project memory — newly discovered flaky apps, job topology details, parameter gotchas, component mappings. If the change has team-wide impact, post a summary to the team channel.
+
+## `/csp-violations` — Content Security Policy Analysis
+
+A focused command for analyzing Content Security Policy violations. CSP violations are reported by browsers when page resources violate the policy headers. Diagnosing them requires correlating the violation report (what was blocked, from which page, from which source) with the current policy configuration.
+
+The command pulls violation data from Cloud Logging, groups violations by directive and source, and produces actionable output: which directives need updating, which sources are legitimate (and should be added to the policy), and which are suspicious — third-party scripts, `data:` URIs, inline execution without nonces.
+
+## Why This Approach Works
+
+Both commands encode institutional knowledge that would otherwise live in a wiki, a runbook, or a senior engineer's head. The Jenkins topology, the flaky app list, the `smoke_branch=develop` gotcha, the Helm provider v3 migration quirks — this information gets discovered once and then perpetually re-discovered by anyone who doesn't know it.
+
+A custom command turns "what was the correct Jenkins parameter for EU-WEST deployments again?" into an answered question that every session already has. The command knows because someone wrote it down — in a format that's executable, not just readable.
+
+The design principle I try to follow: encode the *why* alongside the *how*. The `smoke_branch=develop` instruction isn't just a parameter — it's annotated with the reason it exists. That annotation lets Claude Code adapt correctly when the situation is slightly different from the template, rather than blindly following a rule that doesn't apply.
+
+A command without the why is a recipe that breaks the moment the ingredients change.

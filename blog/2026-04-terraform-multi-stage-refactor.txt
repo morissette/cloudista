@@ -1,0 +1,128 @@
+Title: Splitting a Terraform Monolith into Four Layered Stages
+Author: Marie H.
+Date: 2026-04-08
+============================================================
+# Splitting a Terraform Monolith into Four Layered Stages
+
+There's a point in every infrastructure repo's life where the monolith becomes the problem. One root module, one state file, one `terraform apply` that touches everything. It's convenient at the start. Then the repo grows. A VPC change requires planning the same state file as an application Helm release. A platform upgrade serializes on the same lock as a network change. The blast radius of any mistake is the entire infrastructure.
+
+This project had reached that point: 43 `.tf` files in a single root module, managing everything from VPC configuration to application Helm releases on GKE. I refactored it into four layered root [modules](/blog/terraform-modules), each with its own remote state backend in GCS — the same [multi-cloud state management](/blog/terraform-multi-cloud-state-management) patterns apply even when you're single-cloud.
+
+## The Four-Stage Architecture
+
+```
+terraform/01-network/   — VPC, DNS zones, Cloud Armor, firewall
+terraform/02-cluster/   — GKE cluster, namespaces, node pools, storage classes, service accounts
+terraform/03-platform/  — Platform Helm charts: RabbitMQ, Vault, Velero, Redis, APISIX,
+                          cert-manager, Grafana, external-secrets, OpenTelemetry, Falcon
+terraform/04-apps/      — Application Helm releases, DNS records, IAP, GSM secrets, VMs
+```
+
+State backends:
+```
+gs://${gcp_project}-terraform/${cluster_name}/terraform/state/${stage}/default.tfstate
+```
+
+Each stage reads outputs from prior stages via `data.terraform_remote_state.<stage>` data sources. Cross-stage dependencies are explicit and typed, not implicit through shared variables.
+
+## Design Principles
+
+I used the Zen of Python as a design framework, which might sound odd for Terraform work but maps cleanly:
+
+- **Explicit is better than implicit** → every cross-stage dependency named via [remote state](/blog/terraform-multi-cloud-state-management) outputs; no implicit variable leakage
+- **Simple is better than complex** → tfvars at the root of each stage; no Terragrunt, no wrapper scripts
+- **Flat is better than nested** → four stages at the same directory level, not a hierarchy
+- **Errors should never pass silently** → `tflint --minimum-failure-severity=warning` gates all commits
+
+One deliberate scope decision: destroy/cleanup logic was removed from the plan entirely. A separate `cloud-janitor` process owns sandbox resource cleanup. The refactor should not own cleanup responsibilities.
+
+## The Migration Map
+
+All 43 monolith files were audited and mapped to their destination stage. Several required splitting:
+
+| Monolith File | Split Destination |
+|---|---|
+| `firewall.tf` | `01-network/firewall.tf` + `02-cluster/firewall.tf` |
+| `gsm-secrets.tf` | `03-platform/gsm-secrets.tf` + `04-apps/gsm-secrets.tf` |
+| `helm.tf` | `03-platform/helm.tf` + `04-apps/helm.tf` |
+| `k8s-secrets.tf` | Split between `03-platform` and `04-apps` |
+
+Three new files with no monolith counterpart: `01-network/dns-zones.tf`, `03-platform/locals.tf`, `04-apps/locals.tf`.
+
+## The Helm Provider v2 → v3 Migration
+
+The refactor coincided with a Helm Terraform provider upgrade from v2 to v3. This was responsible for the largest category of CI failures.
+
+**Provider configuration syntax changed:**
+
+v2 used nested blocks:
+```hcl
+kubernetes { }
+```
+
+v3 requires assignment syntax:
+```hcl
+kubernetes = { }
+```
+
+**Release block syntax changed:**
+
+| v2 Syntax | v3 Syntax |
+|---|---|
+| `set_list {}` block | `set = concat([...], [...])` list |
+| `set_sensitive {}` block | `set_sensitive = [...]` list |
+| `dynamic "set" {}` block | Inlined into `set = [...]` |
+
+**Empty version strings rejected:**
+
+Helm v3 rejects `version = ""`. The monolith had 37 `app_chart_version_*` variables, all with `default = ""`. The fix was making each nullable:
+
+```hcl
+variable "app_chart_version_myapp" {
+  type     = string
+  nullable = true
+  default  = null
+}
+```
+
+That was a bulk fix across a lot of variables. The error message from Helm v3 was clear enough, but you have to know that `default = ""` and `default = null` are meaningfully different here.
+
+## Cross-Stage Reference Errors
+
+Moving resources between stages exposed implicit cross-stage dependencies that weren't visible in the monolith:
+
+**Namespace references:** `kubernetes_namespace.platform` was referenced in `03-platform/` but created in `02-cluster/`. Fix: hardcode the namespace strings. The stage ordering guarantees they exist before `03-platform` runs.
+
+**`depends_on` across stage boundaries:** A `depends_on = [workload_identity_binding_eso]` inside `03-platform/helm.tf` referenced a resource in `02-cluster`. Since stage ordering already guarantees 02-cluster runs first, the dependency is redundant and was removed.
+
+**Missing data source:** `data.google_service_account.terraform` was present in the monolith but missing from `03-platform/main.tf`. Added with `count = 0` for sandbox where it's unused.
+
+## The Jenkins Build Loop
+
+Validation ran through Jenkins via the REST API, accessed through `kubectl port-forward`:
+
+```bash
+kubectl port-forward -n jenkins svc/jenkins 9090:8080
+```
+
+Builds #29 through #32 before green:
+
+- **#29/30**: Helm provider v3 `providers.tf` syntax and vault.tf script paths
+- **#31**: The 37 nullable variable fix
+- **#32**: `helm.tf` block syntax for `set_list`, `set_sensitive`, `dynamic "set"`
+
+Each failure: read the console via the REST API, diagnose root cause, fix, lint (zero errors required), commit with `--force-with-lease`, retrigger. The loop is mechanical once you have it set up.
+
+## Rebase Gap Analysis
+
+The refactor branch lived for several weeks alongside active `develop` changes. Before merging, I ran a systematic gap analysis: every commit on `develop` touching `terraform/` was compared against the corresponding stage-dir files.
+
+Seven gaps: GKE version updates, APISIX config changes, image hash updates, new Redis and Helm v3 syntax in freshly merged blocks. All resolved.
+
+This gap analysis is now documented as part of the standard merge process for the branch: before any rebase, compare `develop`'s `terraform/` commits against the stage dirs.
+
+## Result
+
+The monolith is split. Sandbox environments run four independent state backends. The network layer can change without touching application state. Platform infrastructure can upgrade without risking application Helm releases. Each stage's blast radius is scoped to its own concerns.
+
+The harder win was the process artifacts: a documented migration map, a rebase-and-gap-analysis workflow, and a Helm v3 migration guide embedded in project memory so the next session starts informed.

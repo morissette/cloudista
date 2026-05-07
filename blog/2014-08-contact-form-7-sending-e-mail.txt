@@ -1,0 +1,84 @@
+Title: Contact Form 7 - Not Sending Email
+Author: Marie H.
+Date: 2014-08-04
+URL: https://example.com/2014/08/contact-form-7-sending-e-mail/
+Archive: https://web.archive.org/web/20140812220404/http://example.com/2014/08/contact-form-7-sending-e-mail/
+Source: combined (DynamoDB + archive.org)
+
+============================================================
+
+So I recently just installed Contact Form 7 WordPress plugin to handle any contacts that I may receive. Installation and setup was easy. But then. I wasn’t receiving any of the test e-mails I sent myself.
+
+
+Note: You should always test core functionality whenever you make a change.
+
+
+So I dug in, nothing in the PHP error log. Nothing in the HTTP error log. Finally, I did this:
+
+
+```
+[root@mat public_html]# find -name error_log
+[root@mat public_html]# find /var/log -mmin -2
+/var/log/httpd/access_log
+/var/log/maillog
+[root@mat public_html]# tail -f /var/log/maillog
+Aug  3 21:40:45 mat sendmail[10624]: s742ejx0010624: from=apache, size=577, class=0, nrcpts=1, msgid=, relay=apache@localhost
+Aug  3 21:40:45 mat sendmail[10624]: s742ejx0010624: to=admin@example.com, ctladdr=apache (48/48), delay=00:00:00, xdelay=00:00:00, mailer=relay, pri=30577, relay=[127.0.0.1] [127.0.0.1], dsn=4.0.0, stat=Deferred: Connection refused by [127.0.0.1]
+Aug  4 13:47:38 mat sendmail[12028]: s74IlcBK012028: from=apache, size=658, class=0, nrcpts=1, msgid=, relay=apache@localhost
+Aug  4 13:47:38 mat sendmail[12028]: s74IlcBK012028: to=admin@example.com, ctladdr=apache (48/48), delay=00:00:00, xdelay=00:00:00, mailer=relay, pri=30658, relay=[127.0.0.1] [127.0.0.1], dsn=4.0.0, stat=Deferred: Connection refused by [127.0.0.1]
+Aug  4 13:54:54 mat sendmail[12070]: s74IssjP012070: from=apache, size=590, class=0, nrcpts=1, msgid=, relay=apache@localhost
+Aug  4 13:54:54 mat sendmail[12070]: s74IssjP012070: to=user@example.com, ctladdr=apache (48/48), delay=00:00:00, xdelay=00:00:00, mailer=relay, pri=30590, relay=[127.0.0.1] [127.0.0.1], dsn=4.0.0, stat=Deferred: Connection refused by [127.0.0.1]
+Aug  4 14:03:19 mat sendmail[12195]: s74J3JaF012195: from=apache, size=633, class=0, nrcpts=1, msgid=, relay=apache@localhost
+Aug  4 14:03:19 mat sendmail[12195]: s74J3JaF012195: to=admin@example.com, ctladdr=apache (48/48), delay=00:00:00, xdelay=00:00:00, mailer=relay, pri=30633, relay=[127.0.0.1] [127.0.0.1], dsn=4.0.0, stat=Deferred: Connection refused by [127.0.0.1]
+^C
+[root@mat public_html]# date
+Mon Aug  4 14:04:40 CDT 2014
+[root@mat public_html]# mail -v admin@example.com
+Subject: Test
+Hello world
+.
+EOT
+admin@example.com... Connecting to [127.0.0.1] via relay...
+admin@example.com... Deferred: Connection refused by [127.0.0.1]
+```
+
+
+So I found my problem, there was something wrong with sendmail connecting to the server. Turns out sendmail wasn’t running or even configured to start. So I went ahead and setup chkconfig for sendmail and restarted the service. And again as always tested to ensure the I could send mail – not only via CLI but also through the Contact Form plugin.
+
+
+```
+[root@mat public_html]# chkconfig --levels 235 sendmail on
+[root@mat public_html]# service sendmail restart
+Shutting down sendmail:                                    [FAILED]
+Starting sendmail:                                         [  OK  ]
+Starting sm-client:                                        [  OK  ]
+[root@mat public_html]# mail -v admin@example.com
+Subject: OMG TEST
+testing
+.
+EOT
+admin@example.com... Connecting to [127.0.0.1] via relay...
+220 mat.example.com ESMTP Sendmail 8.14.4/8.14.4; Mon, 4 Aug 2014 14:07:03 -0500
+>>> EHLO mat.example.com
+250-mat.example.com Hello localhost [127.0.0.1], pleased to meet you
+250-ENHANCEDSTATUSCODES
+250-PIPELINING
+250-8BITMIME
+250-SIZE
+250-DSN
+250-ETRN
+250-DELIVERBY
+250 HELP
+>>> MAIL From: SIZE=223
+250 2.1.0 ... Sender ok
+>>> RCPT To:
+>>> DATA
+250 2.1.5 ... Recipient ok
+354 Enter mail, end with "." on a line by itself
+>>> .
+250 2.0.0 s74J73Ki012276 Message accepted for delivery
+admin@example.com... Sent (s74J73Ki012276 Message accepted for delivery)
+Closing connection to [127.0.0.1]
+>>> QUIT
+221 2.0.0 mat.example.com closing connection
+```
