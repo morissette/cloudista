@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-05-06] — Homepage SEO: rewrite title and meta description for CTR
+
+### Changed
+- `site/index.html` — `<title>`, `<meta name="description">`, OG, Twitter, and JSON-LD updated. New title: `Cloudista — DevOps & Platform Engineering Blog by Marie H.` (was: `Cloudista — Cloud Infrastructure & DevOps Blog`). Meta description rewritten to lead with "Hands-on" + named tech stack (Kubernetes, Terraform, GCP, AWS, CI/CD) and add author byline as a trust signal. Driven by GSC data showing 0% CTR at avg position 3.74 on the brand query.
+
+### Added
+- JSON-LD `author.Person.Marie H.` field on the Blog schema for stronger authorship signal.
+
+---
+
 ## [2026-05-06] — Sanitize internal product/company terms across blog posts
 
 ### Changed
