@@ -6,6 +6,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-05-06] — Homepage SEO: rewrite title and meta description for CTR
+
+### Changed
+- `site/index.html` — `<title>`, `<meta name="description">`, OG, Twitter, and JSON-LD updated. New title: `Cloudista — DevOps & Platform Engineering Blog by Marie H.` (was: `Cloudista — Cloud Infrastructure & DevOps Blog`). Meta description rewritten to lead with "Hands-on" + named tech stack (Kubernetes, Terraform, GCP, AWS, CI/CD) and add author byline as a trust signal. Driven by GSC data showing 0% CTR at avg position 3.74 on the brand query.
+
+### Added
+- JSON-LD `author.Person.Marie H.` field on the Blog schema for stronger authorship signal.
+
+---
+
+## [2026-05-06] — Sanitize internal product/company terms across blog posts
+
+### Changed
+- `blog/2014-08-contact-form-7-sending-e-mail.txt` — replaced personal-domain email + hostname references (`mori@vabch.org`, `admin@mattharris.org`, `mat.mattharris.org`, `mattharris.org`) with `example.com` placeholders in sample sendmail logs
+- `blog/2024-01-gke-disaster-recovery-pipeline.txt` — `zebra-dr-assets` → `platform-dr-assets`; `zebra-velero-backups` → `platform-velero-backups` (GCS bucket names in DR script)
+- `blog/2026-03-gcp-alert-threshold-tuning.txt` — `spg-zpc-p` → `platform-prod` (GCP project ID); `PPME` → `PMS`; `Envirovue` → `SiteWatch`; `NL CPU Usage` → `EU-WEST CPU Usage` (alert names)
+- `blog/2026-04-claude-code-custom-commands.txt` — `ZPCINF-` → `INFRA-`; `zsbpportal` → `customer-portal`; `gcpcreatecluster` → `cluster-create`; `zpc-infrastructure` → `platform-infrastructure`; `harmonix-app` → `signaltrack-app`; `devopsconsole` → `opsboard`; `NL deployments` → `EU-WEST deployments`
+- `blog/2026-04-terraform-multi-stage-refactor.txt` — `zpc-infrastructure-reaper` → `cloud-janitor`; `kubernetes_namespace.zpc` → `kubernetes_namespace.platform`
+
+### Added
+- All five posts now tracked in git (force-added — `blog/*.txt` is otherwise gitignored). Future content edits to these files will surface in `git status`.
+
+---
+
 ## [2026-03-26] — Buy Me a Coffee integration
 
 ### Added

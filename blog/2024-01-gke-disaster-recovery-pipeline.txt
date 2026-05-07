@@ -1,0 +1,118 @@
+Title: Designing Disaster Recovery for GKE Workloads
+Author: Marie H.
+Date: 2024-01-22
+============================================================
+# Designing Disaster Recovery for GKE Workloads
+
+Disaster recovery for Kubernetes is not the same as disaster recovery for VMs. The abstractions are different, the failure modes are different, and the tooling — while good — has sharp edges that will find you at the worst possible time. This post covers what we built on a recent project for GKE workload DR, what we got wrong the first time, and what actually matters.
+
+## What Needs DR
+
+Before picking tools, be explicit about what you're actually recovering. For Kubernetes workloads, that breaks down into four categories:
+
+**PersistentVolumes (data).** This is the obvious one. Your stateful workloads have data that needs to exist after a cluster failure. Velero with the GCP plugin handles PV snapshots via GCP disk snapshots, and the snapshots need to land in a multi-region configuration so they're accessible from your recovery region.
+
+**Kubernetes resource manifests.** Deployments, Services, ConfigMaps, Secrets, RBAC policies, HPA configs — all of it. Velero handles this by default. These are stored as JSON/YAML in a GCS backup bucket.
+
+**CRDs.** This is the one teams forget. Custom Resource Definitions define the schema for custom resources in your cluster. If you restore a backup that contains custom resources (say, a `Certificate` from cert-manager or a `ServiceMonitor` from the Prometheus operator) to a cluster that doesn't have the corresponding CRDs installed, the restore fails. Silently, in some cases. More on this below.
+
+**External dependencies.** DNS records, load balancer certificates, external secrets (if you're using something like External Secrets Operator pulling from GCP Secret Manager), firewall rules. Velero doesn't touch these. They need to be handled separately, either through Terraform or a documented manual step in the runbook.
+
+## The CRD Archiving Problem
+
+When we first tested a restore, it failed on cert-manager `Certificate` resources. The error was something like "no kind Certificate is registered for version cert-manager.io/v1" — the CRD didn't exist in the recovery cluster yet, so Kubernetes had no idea what to do with the resource.
+
+Velero does include CRDs in backups, but the restore order isn't guaranteed to put CRDs before the resources that depend on them, especially with complex dependency chains. The fix we landed on was a pre-DR job: before a DR run, enumerate all CRDs in the production cluster and write them to a GCS path separate from the Velero backup location:
+
+```bash
+kubectl get crds -o json > /tmp/crds-snapshot.json
+gsutil cp /tmp/crds-snapshot.json gs://platform-dr-assets/crd-archive/$(date +%Y%m%d).json
+```
+
+On the recovery side, the first step in the DR runbook is to apply the latest CRD snapshot before running any Velero restore:
+
+```bash
+gsutil cp gs://platform-dr-assets/crd-archive/$(date +%Y%m%d).json /tmp/crds-snapshot.json
+kubectl apply -f /tmp/crds-snapshot.json
+```
+
+This runs before Velero restores anything. CRDs go in first, then the restore proceeds and finds the types it needs.
+
+## Multi-Region Strategy
+
+Primary cluster is in `us-central1`. Recovery cluster is in `us-east1`. The GCS backup bucket is configured as multi-region (US), so backups written from `us-central1` are accessible from `us-east1` without any cross-region copy step.
+
+The recovery cluster is kept warm: it's running, it's on the correct GKE version (more on that in a moment), and Velero is installed with the same configuration pointing to the same GCS bucket. It runs minimal workloads — just the platform components. It costs money to keep it warm, but the alternative is a cold cluster that takes 20-30 minutes to provision and configure during an incident, which directly hits your RTO.
+
+Velero configuration on both clusters points to the same backup location. On the recovery cluster, Velero runs in read-only mode against that location — it can see and restore backups but won't write new ones unless you explicitly switch it to read-write during a DR event.
+
+```yaml
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: default
+  namespace: velero
+spec:
+  provider: gcp
+  objectStorage:
+    bucket: platform-velero-backups
+    prefix: production
+  accessMode: ReadOnly
+```
+
+## Alert Snoozing During DR Runs
+
+This sounds like a minor operational detail. It isn't. During a DR drill or actual DR event, you're deliberately taking workloads offline and restoring them. From the perspective of your monitoring stack, the cluster looks like it's on fire: pods are down, endpoints are unhealthy, PodDisruptionBudgets are being violated. If you don't suppress alerts, your on-call rotation gets flooded with noise at exactly the moment they need to be focused on the recovery process.
+
+We added a maintenance mode flag. It's a ConfigMap in the monitoring namespace:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alerting-maintenance
+  namespace: monitoring
+data:
+  enabled: "true"
+  reason: "DR drill"
+  end_time: "2024-01-22T18:00:00Z"
+```
+
+Our alerting pipeline — which runs on Victoria Metrics with a custom alertmanager config — reads this ConfigMap before routing alerts. Non-critical alerts are suppressed if `enabled: "true"` and `end_time` is in the future. P0s still page. Everything else waits.
+
+Before any DR drill, setting this flag is step one in the runbook. Forgetting it is how you burn out your on-call rotation with false positives and erode trust in your alerting system.
+
+## The DR Runbook
+
+The runbook lives in a location that is accessible when the primary cluster is down. We keep it in Confluence and in a read-only GCS bucket alongside the CRD archives — the assumption being that if GKE is down, GCS is likely still accessible.
+
+Key steps, abbreviated:
+
+1. Set maintenance mode flag on recovery cluster (alerting suppression)
+2. Apply latest CRD snapshot to recovery cluster
+3. Identify most recent successful Velero backup: `velero backup get --kubeconfig=/path/to/recovery-kubeconfig`
+4. Run restore: `velero restore create --from-backup BACKUP_NAME`
+5. Monitor restore: `velero restore describe RESTORE_NAME --details`
+6. Validate application health: run smoke tests against recovery cluster endpoints
+7. Update DNS to point to recovery cluster load balancer IPs
+8. Measure and record RTO
+
+The GCS bucket credentials are not stored in the primary cluster. They live in GCP Secret Manager and in the documented break-glass procedure. If the cluster is compromised or unavailable, you need a path to credentials that doesn't run through the thing that's broken.
+
+## What the First DR Drill Found
+
+We scheduled a quarterly DR drill. The first one exposed three things that would have been critical failures in a real incident:
+
+**Velero had an expired credential for the backup storage location.** The backup jobs were succeeding — Velero was writing backup metadata — but the GCS credential used by the recovery cluster's BSL had been rotated and not updated. The recovery cluster couldn't actually read the backups. We found this when `velero backup get` returned an empty list on the recovery cluster. Fix: Velero BSL credentials go into the secret rotation schedule.
+
+**Two CRDs weren't in the archive.** We had two internal operators with CRDs that were deployed outside the standard operator lifecycle, so they weren't picked up by the `kubectl get crds` script (it was running in a namespace-scoped context by mistake — `kubectl get crds` is cluster-scoped, but a permissions issue meant only some CRDs were visible). Fix: run the CRD archive job as a cluster-admin service account and verify the output count matches `kubectl get crds --no-headers | wc -l`.
+
+**The recovery cluster was on GKE 1.26, production was on 1.27.** One minor version difference. Some API changes between versions meant certain manifests that were valid on 1.27 weren't accepted on 1.26. Fix: add a version parity check to the pre-DR checklist. When production upgrades, the recovery cluster upgrades within the same maintenance window.
+
+None of these would have been obvious without running the drill. The documentation looked correct. The monitoring showed green. Only an actual end-to-end test found them.
+
+## Closing Thoughts
+
+DR for GKE is solvable, but the details are unforgiving. The most important thing I can say is: run the drill, and run it as close to a real scenario as you can. Don't just verify that Velero can create a backup — verify that you can restore it, from scratch, with the credentials and access patterns that would exist in an actual incident. The gap between "backup is running" and "restore actually works" is where most DR plans fail.
+
+RTO target for our configuration is 4 hours. Our last drill came in at 2h 45m. That includes DNS propagation time, which accounts for about 40 minutes of waiting.

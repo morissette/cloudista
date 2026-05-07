@@ -1,0 +1,83 @@
+Title: Right-Sizing GCP Alert Thresholds: A Data-First Approach to Alert Fatigue
+Author: Marie H.
+Date: 2026-03-28
+============================================================
+# Right-Sizing GCP Alert Thresholds: A Data-First Approach to Alert Fatigue
+
+Alert fatigue is one of those infrastructure problems that compounds quietly. When alerting fires too often, on-call learns to ignore it. When on-call learns to ignore it, real incidents get missed. The pattern is well-known. The fix is rarely done rigorously because it requires pulling historical data, understanding what the alert is actually measuring, and making defensible threshold decisions — not just bumping numbers until Slack goes quiet.
+
+I recently worked through this for four high-noise production alert policies on a GCP project. Here's how I approached it.
+
+## Finding the Right Data Source
+
+The obvious first step — querying the Cloud Monitoring incidents API — turned out not to exist in a useful form.
+
+Three things I tried that didn't work:
+
+- `gcloud alpha monitoring incidents list` — not available in the current gcloud version
+- Cloud Monitoring REST API v2 incidents endpoint — returned 404
+- Querying `jsonPayload.incident.state` in Cloud Logging — wrong log format, returned nothing
+
+What actually worked: querying Cloud Logging for the log name `monitoring.googleapis.com/ViolationOpenEventv1`. This log captures one entry each time an alert policy fires.
+
+```bash
+gcloud logging read \
+  'logName="projects/platform-prod/logs/monitoring.googleapis.com%2FViolationOpenEventv1"' \
+  --project=platform-prod \
+  --freshness=30d \
+  --limit=1000 \
+  --format=json
+```
+
+Two fields matter in those log entries: `labels.policy_display_name` (the alert name) and `labels.verbose_message`. Use `verbose_message`, not `terse_message` — terse truncates the actual metric value, which is the number you need to decide whether the threshold is wrong or just the window.
+
+## The Data
+
+Firing counts over 30 days in production:
+
+| Alert Policy | Fires / 30 days |
+|---|---|
+| PMS Container Error Logs | 568 |
+| SiteWatch Read Request Abuse | 235 |
+| EU-WEST CPU Usage Exceed 80% | 111 |
+| HAProxy Container Error Logs | 25 |
+
+568 fires in 30 days is approximately 19 per day, or one every 75 minutes. That's not alerting. That's noise that's training the on-call team to ignore the paging system.
+
+## The Fixes
+
+**PMS Container Error Logs: threshold 50 → 200**
+
+The verbose_message data showed normal operation producing 100–180 error log lines per evaluation window. The threshold of 50 was catching routine churn. Tripling it to 200 puts the alert above the observed noise floor while still catching genuine error spikes.
+
+**SiteWatch Read Request Abuse: threshold 5 → 20**
+
+This alert was designed to catch API abuse patterns. The firing data showed request counts of 8–15 at the time of firing — legitimate traffic from expected usage patterns during peak hours. The new threshold of 20 better separates noise from actual abuse.
+
+**EU-WEST CPU Usage Exceed 80%: duration 1 min → 5 min**
+
+This one was conceptually different, and it's the most interesting fix in the set.
+
+The CPU values at the time of firing were consistently near 80% — the threshold itself was not wrong. The problem was the evaluation window. A 1-minute window measures instantaneous state. It fires on any transient spike during a deployment or batch operation, even if CPU returns to normal in 90 seconds. A 5-minute window measures sustained load. That's what you actually care about for infrastructure sizing decisions.
+
+The instinct when an alert fires too often is to raise the threshold. The right question is: *what is the alert actually measuring?* For this one, the answer was "not what we want it to measure."
+
+**HAProxy Container Error Logs: threshold 100 → 400**
+
+HAProxy produces error logs during rolling deployments when connections are briefly refused during pod restarts. Quadrupling the threshold filters deployment noise while preserving signal for genuine service degradation.
+
+## Infrastructure: Terraform + Code Generation
+
+The alerting configuration is managed as Terraform with a custom Python code generation step — `tf_generate.py` templates per-environment policy files into a `build/` directory before linting. Changes go into `terraform/templates/policies/`, get built for all four environments (dev, stage, prod, tools), then commit.
+
+A tflint pass surfaced two unused variable declarations in `variables.tf`: `two_hours` and `rabbitmq_disk_space_threshold`. These correspond to alert policies currently disabled but expected to return. I annotated them with `# tflint-ignore: terraform_unused_declarations` rather than removing them — removing them would mean rediscovering the right values later.
+
+Validation:
+- `tf_generate.py` — 0 errors across all four environments
+- `tflint --minimum-failure-severity=error` — 0 errors
+
+## What Makes This Repeatable
+
+The more important deliverable than the threshold changes themselves is the process: a query pattern for extracting historical alert firing data from Cloud Logging, a structured analysis of firing counts and actual metric values, and documented reasoning for each change.
+
+The next time someone reviews these alerts — whether that's in three months or two years — they have a baseline. They know what the noise floor was, what the threshold was, and why we moved it. That's worth more than the alert changes themselves.
