@@ -16,6 +16,10 @@ build/
 *.pem
 *.key
 secrets/
+scripts/cloudista-*.json
+scripts/.indexing_done.txt
+scripts/.gsc_status_history.json
+docs/gsc-status.md
 
 # Node
 node_modules/

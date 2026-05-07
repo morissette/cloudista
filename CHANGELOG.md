@@ -6,6 +6,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-05-06] — Google Search Console indexing automation
+
+### Added
+- `.github/workflows/gsc-automation.yml` — daily cron (09:00 UTC) + `workflow_dispatch` + `pull_request` (paths: `blog/*.txt`). Daily job submits new sitemap URLs to the Indexing API, builds an index-status report, and resubmits Discovered-but-not-indexed URLs older than 7 days. PR job posts/updates a sticky comment with current GSC verdict + coverage state for any changed posts.
+- `scripts/gsc_status.py` — walks the live sitemap, calls Search Console URL Inspection API per URL, writes `docs/gsc-status.md` summary table and `scripts/.gsc_status_history.json` machine-readable history (last 30 runs).
+- `scripts/gsc_resubmit_stale.py` — reads latest history, finds URLs stuck in "Discovered - currently not indexed" for ≥`MIN_AGE_DAYS` (default 7), resubmits via Indexing API up to `MAX_RESUBMITS` (default 50). Stops on 429 quota.
+- `scripts/gsc_inspect_pr.py` — reads `blog/*.txt` paths from stdin, derives slugs, queries URL Inspection, writes a markdown comment body to stdout.
+
+### Changed
+- `scripts/request_indexing.py` — `KEY_FILE` and `STATE_FILE` now overridable via `GSC_SA_KEY_FILE` / `GSC_STATE_FILE` env vars so the workflow can write the SA JSON to `/tmp` instead of into the repo.
+- `.gitignore` — exclude `scripts/cloudista-*.json` (SA keys), `scripts/.indexing_done.txt`, `scripts/.gsc_status_history.json`, and `docs/gsc-status.md` (workflow-only artifact).
+
+### Required GitHub secret
+- `GSC_SA_JSON` — full contents of `scripts/cloudista-8ffbd7d429b1.json` (service account `claude@cloudista.iam.gserviceaccount.com`, granted siteOwner on `sc-domain:cloudista.org`).
+
+---
+
 ## [2026-03-26] — Buy Me a Coffee integration
 
 ### Added
